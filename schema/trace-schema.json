@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evaris.ai/schemas/trace-schema.json",
+  "title": "etraceSchema",
+  "description": "Canonical trace model for Evaris — the single source of truth. Codegen all language bindings from this.",
+
+  "$defs": {
+    "TraceKind": {
+      "title": "TraceKind",
+      "description": "What kind of operation this span represents. Covers online tracing, offline evals, and monitoring. Based on analysis of Inspect AI (20 event types), OpenInference/Arize Phoenix, Langfuse, and Evaris monitoring/eval requirements.",
+      "type": "string",
+      "enum": [
+        "workflow",
+        "agent",
+        "step",
+        "llm",
+        "tool",
+        "http",
+        "retrieval",
+        "reranker",
+        "embedding",
+        "sandbox",
+        "handoff",
+        "approval",
+        "guardrail",
+        "eval",
+        "scorer",
+        "custom"
+      ]
+    },
+
+    "TraceStatus": {
+      "title": "TraceStatus",
+      "type": "string",
+      "enum": ["unset", "ok", "error"]
+    },
+
+    "TraceLevel": {
+      "title": "TraceLevel",
+      "description": "Severity level.",
+      "type": "string",
+      "enum": ["debug", "default", "warning", "error"]
+    },
+
+    "ScoreDataType": {
+      "title": "ScoreDataType",
+      "type": "string",
+      "enum": ["numeric", "boolean", "categorical"]
+    },
+
+    "ScoreSource": {
+      "title": "ScoreSource",
+      "type": "string",
+      "enum": ["annotation", "api", "eval"]
+    },
+
+    "UsageUnit": {
+      "title": "UsageUnit",
+      "type": "string",
+      "enum": ["tokens", "characters", "images", "steps"]
+    },
+
+    "TraceError": {
+      "title": "TraceError",
+      "type": "object",
+      "properties": {
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "stack": { "type": "string" }
+      },
+      "required": ["message"]
+    },
+
+    "TraceEvent": {
+      "title": "TraceEvent",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "attributes": { "type": "object", "additionalProperties": true }
+      },
+      "required": ["name", "timestamp"]
+    },
+
+    "TraceLink": {
+      "title": "TraceLink",
+      "type": "object",
+      "properties": {
+        "traceId": { "type": "string" },
+        "spanId": { "type": "string" },
+        "attributes": { "type": "object", "additionalProperties": true }
+      },
+      "required": ["traceId", "spanId"]
+    },
+
+    "Usage": {
+      "title": "Usage",
+      "description": "Token usage with split cost tracking.",
+      "type": "object",
+      "properties": {
+        "input": { "type": "integer", "default": 0 },
+        "output": { "type": "integer", "default": 0 },
+        "total": { "type": "integer", "default": 0 },
+        "unit": { "$ref": "#/$defs/UsageUnit", "default": "tokens" },
+        "inputCost": { "type": "number", "default": 0 },
+        "outputCost": { "type": "number", "default": 0 },
+        "totalCost": { "type": "number", "default": 0 },
+        "calculatedInputCost": { "type": "number" },
+        "calculatedOutputCost": { "type": "number" },
+        "calculatedTotalCost": { "type": "number" },
+        "cachedTokens": { "type": "integer", "default": 0 },
+        "reasoningTokens": { "type": "integer", "default": 0 }
+      }
+    },
+
+    "StreamingMetrics": {
+      "title": "StreamingMetrics",
+      "description": "Streaming LLM performance metrics.",
+      "type": "object",
+      "properties": {
+        "completionStartTime": { "type": "string", "format": "date-time" },
+        "tokensPerSecond": { "type": "number" },
+        "timeToFirstTokenMs": { "type": "number" }
+      }
+    },
+
+    "Span": {
+      "title": "Span",
+      "description": "A single traced operation. The ONE primitive. Everything is a span with a kind.",
+      "type": "object",
+      "properties": {
+        "traceId": { "type": "string" },
+        "spanId": { "type": "string" },
+        "parentSpanId": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "$ref": "#/$defs/TraceKind" },
+        "status": { "$ref": "#/$defs/TraceStatus", "default": "unset" },
+        "level": { "$ref": "#/$defs/TraceLevel", "default": "default" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "endedAt": { "type": "string", "format": "date-time" },
+        "durationNs": { "type": "integer" },
+        "input": { "description": "Arbitrary input payload" },
+        "output": { "description": "Arbitrary output payload" },
+        "error": { "$ref": "#/$defs/TraceError" },
+        "attributes": { "type": "object", "additionalProperties": true, "default": {} },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/TraceEvent" }, "default": [] },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/TraceLink" }, "default": [] },
+        "tags": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "model": { "type": "string", "description": "LLM model name when kind=llm" },
+        "provider": { "type": "string", "description": "LLM provider when kind=llm" },
+        "modelParameters": { "type": "object", "additionalProperties": true },
+        "usage": { "$ref": "#/$defs/Usage" },
+        "streaming": { "$ref": "#/$defs/StreamingMetrics" },
+        "promptId": { "type": "string" },
+        "userId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "version": { "type": "string" },
+        "release": { "type": "string" },
+        "environment": { "type": "string", "enum": ["production", "staging", "development"] }
+      },
+      "required": ["traceId", "spanId", "name", "kind", "status", "startedAt"]
+    },
+
+    "SpanOptions": {
+      "title": "SpanOptions",
+      "description": "Options when creating a span.",
+      "type": "object",
+      "properties": {
+        "kind": { "$ref": "#/$defs/TraceKind", "default": "custom" },
+        "input": { "description": "Input to capture" },
+        "attributes": { "type": "object", "additionalProperties": true },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "level": { "$ref": "#/$defs/TraceLevel" },
+        "model": { "type": "string" },
+        "provider": { "type": "string" },
+        "modelParameters": { "type": "object", "additionalProperties": true },
+        "promptId": { "type": "string" },
+        "version": { "type": "string" },
+        "release": { "type": "string" },
+        "captureInput": { "type": "boolean", "default": true },
+        "captureOutput": { "type": "boolean", "default": true }
+      }
+    },
+
+    "ContextOptions": {
+      "title": "ContextOptions",
+      "description": "Context that propagates across all spans in a call chain.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "evalRunId": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "version": { "type": "string" },
+        "release": { "type": "string" }
+      }
+    },
+
+    "ScoreOptions": {
+      "title": "ScoreOptions",
+      "type": "object",
+      "properties": {
+        "traceId": { "type": "string" },
+        "spanId": { "type": "string" },
+        "name": { "type": "string" },
+        "value": { "description": "number, boolean, or string" },
+        "dataType": { "$ref": "#/$defs/ScoreDataType" },
+        "source": { "$ref": "#/$defs/ScoreSource" },
+        "comment": { "type": "string" },
+        "metadata": { "type": "object", "additionalProperties": true }
+      },
+      "required": ["name"]
+    },
+
+    "InitOptions": {
+      "title": "InitOptions",
+      "description": "Options for initializing the tracing library.",
+      "type": "object",
+      "properties": {
+        "apiKey": { "type": "string" },
+        "projectId": { "type": "string" },
+        "endpoint": { "type": "string", "description": "OTLP endpoint URL", "default": "https://runtime.evaris.ai/v1/traces" },
+        "serviceName": { "type": "string", "default": "evaris-app" },
+        "environment": { "type": "string", "enum": ["production", "staging", "development"], "default": "production" },
+        "autoInstrument": {
+          "type": "object",
+          "properties": {
+            "llm": { "type": "boolean", "default": true }
+          },
+          "default": { "llm": true }
+        },
+        "debug": { "type": "boolean", "default": false },
+        "version": { "type": "string" },
+        "release": { "type": "string" }
+      }
+    }
+  }
+}

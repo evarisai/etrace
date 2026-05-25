@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# TypeScript
+node_modules/
+*.js.map
+.tsc/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Generated / scratch
+architecture-diagram.html
+
+# Etrace Studio (separate product, developed separately)
+etrace-studio/
+
+# Reference repos (cloned for research, not part of the project)
+/tmp/

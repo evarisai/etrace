@@ -1,0 +1,70 @@
+{
+  "name": "etrace",
+  "version": "0.2.0",
+  "description": "AI agent tracing library — zero-dep core, composable pipeline, auto-instruments LLM calls",
+  "main": "./src/index.js",
+  "types": "./src/index.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "import": "./src/types.ts"
+    },
+    "./pricing": {
+      "types": "./src/pricing.ts",
+      "import": "./src/pricing.ts"
+    },
+    "./exporter": {
+      "types": "./src/exporter.ts",
+      "import": "./src/exporter.ts"
+    },
+    "./processor": {
+      "types": "./src/processor.ts",
+      "import": "./src/processor.ts"
+    },
+    "./otel": {
+      "types": "./src/otel/index.ts",
+      "import": "./src/otel/index.ts"
+    },
+    "./evaris": {
+      "types": "./src/evaris/index.ts",
+      "import": "./src/evaris/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ tests/",
+    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
+    "check": "tsc --noEmit && eslint src/ tests/ && prettier --check 'src/**/*.ts' 'tests/**/*.ts' && vitest run",
+    "build": "tsc"
+  },
+  "keywords": [
+    "tracing",
+    "observability",
+    "ai",
+    "llm",
+    "agents"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/core": "^2.7.1",
+    "@opentelemetry/resources": "^2.7.1",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@opentelemetry/semantic-conventions": "^1.41.1",
+    "@types/node": "^22.19.19",
+    "eslint": "^10.4.0",
+    "prettier": "^3.8.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.60.0",
+    "vitest": "^3.2.1"
+  }
+}
