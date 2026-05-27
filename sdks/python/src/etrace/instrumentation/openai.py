@@ -1,7 +1,12 @@
-"""OpenAI auto-instrumentor."""
+"""OpenAI auto-instrumentor.
+
+Patches OpenAI chat completions and embeddings (sync + async).
+Uses etrace spans directly (no OTel dependency).
+"""
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, ClassVar
 
@@ -18,7 +23,7 @@ class OpenAIInstrumentor(BaseInstrumentor):
     name: ClassVar[str] = "openai"
     target_packages: ClassVar[list[str]] = ["openai"]
 
-    def instrument(self, tracer: Any, calc_costs: bool = True) -> bool:
+    def instrument(self, calc_costs: bool = True) -> bool:
         try:
             from openai.resources.chat.completions import AsyncCompletions, Completions
             from openai.resources.embeddings import AsyncEmbeddings, Embeddings
@@ -31,7 +36,6 @@ class OpenAIInstrumentor(BaseInstrumentor):
                 Completions,
                 "create",
                 self._create_llm_wrapper_factory(
-                    tracer,
                     "openai.chat",
                     "openai",
                     self._process_chat,
@@ -43,7 +47,6 @@ class OpenAIInstrumentor(BaseInstrumentor):
                 AsyncCompletions,
                 "create",
                 self._create_llm_wrapper_factory(
-                    tracer,
                     "openai.chat",
                     "openai",
                     self._process_chat,
@@ -55,7 +58,6 @@ class OpenAIInstrumentor(BaseInstrumentor):
                 Embeddings,
                 "create",
                 self._create_llm_wrapper_factory(
-                    tracer,
                     "openai.embeddings",
                     "openai",
                     self._process_embeddings,
@@ -68,7 +70,6 @@ class OpenAIInstrumentor(BaseInstrumentor):
                 AsyncEmbeddings,
                 "create",
                 self._create_llm_wrapper_factory(
-                    tracer,
                     "openai.embeddings",
                     "openai",
                     self._process_embeddings,
@@ -92,19 +93,23 @@ class OpenAIInstrumentor(BaseInstrumentor):
         kwargs: dict[str, Any],
         calc_costs: bool,
     ) -> None:
-        model = kwargs.get("model", "")
+        # LangChain (and other frameworks) may use
+        # client.chat.completions.with_raw_response.create(...) which
+        # returns a LegacyAPIResponse wrapping the real ChatCompletion.
+        if type(result).__name__ == "LegacyAPIResponse":
+            parsed = result.parse()
+        else:
+            parsed = result
+
+        model = self._resolve_model(parsed, str(kwargs.get("model", "")))
 
         if kwargs.get("stream", False):
-            span.set_attribute("gen_ai.streaming", True)
+            span.attributes["gen_ai.streaming"] = True
             # Streaming responses don't have .usage. Usage is only available
             # with stream_options={"include_usage": True}.
             return
 
-        resp_model = getattr(result, "model", None)
-        if resp_model:
-            model = resp_model
-
-        usage = getattr(result, "usage", None)
+        usage = getattr(parsed, "usage", None)
         if usage:
             prompt = getattr(usage, "prompt_tokens", 0) or 0
             completion = getattr(usage, "completion_tokens", 0) or 0
@@ -132,13 +137,25 @@ class OpenAIInstrumentor(BaseInstrumentor):
             )
 
         try:
-            choices = getattr(result, "choices", None)
+            choices = getattr(parsed, "choices", None)
             if choices:
                 msg = getattr(choices[0], "message", None)
                 if msg:
                     content = getattr(msg, "content", None)
                     if content:
-                        span.set_attribute("gen_ai.output", str(content)[:MAX_ATTR_LEN])
+                        self._capture_output(span, str(content))
+                    else:
+                        # When content is empty the LLM is requesting tool calls.
+                        # Capture them so every LLM span has visible output.
+                        tool_calls = getattr(msg, "tool_calls", None)
+                        if tool_calls:
+                            tc_data = []
+                            for tc in tool_calls:
+                                tc_data.append({
+                                    "name": getattr(tc.function, "name", "") if hasattr(tc, "function") else getattr(tc, "name", ""),
+                                    "arguments": getattr(tc.function, "arguments", "") if hasattr(tc, "function") else getattr(tc, "arguments", ""),
+                                })
+                            self._capture_output(span, json.dumps(tc_data))
         except Exception:
             pass
 
@@ -149,10 +166,7 @@ class OpenAIInstrumentor(BaseInstrumentor):
         kwargs: dict[str, Any],
         calc_costs: bool,
     ) -> None:
-        model = kwargs.get("model", "")
-        resp_model = getattr(result, "model", None)
-        if resp_model:
-            model = resp_model
+        model = self._resolve_model(result, str(kwargs.get("model", "")))
 
         usage = getattr(result, "usage", None)
         if usage:

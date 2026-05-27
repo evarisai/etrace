@@ -1,9 +1,15 @@
-"""Auto-instrumentation registry."""
+"""Auto-instrumentation registry.
+
+Discovers available LLM provider SDKs and patches them to emit
+etrace spans with automatic cost calculation.
+
+No OTel dependency — uses etrace spans directly.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .anthropic import AnthropicInstrumentor
 from .openai import OpenAIInstrumentor
@@ -21,7 +27,7 @@ _INSTRUMENTOR_CLASSES: list[type[BaseInstrumentor]] = [
 _active: list[BaseInstrumentor] = []
 
 
-def instrument_all(tracer: Any, calc_costs: bool = True) -> list[str]:
+def instrument_all(calc_costs: bool = True) -> list[str]:
     """Try every registered instrumentor. Returns names of successfully patched providers."""
     global _active
 
@@ -30,7 +36,7 @@ def instrument_all(tracer: Any, calc_costs: bool = True) -> list[str]:
     for cls in _INSTRUMENTOR_CLASSES:
         inst = cls()
         try:
-            if inst.instrument(tracer, calc_costs):
+            if inst.instrument(calc_costs):
                 _active.append(inst)
                 enabled.append(inst.name)
         except Exception as exc:

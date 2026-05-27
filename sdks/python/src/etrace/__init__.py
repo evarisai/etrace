@@ -172,7 +172,7 @@ def _init_instrumentation() -> None:
     try:
         from .instrumentation import instrument_all
 
-        instrument_all(None, _calc_costs)
+        instrument_all(_calc_costs)
     except Exception as e:
         logger.warning("Auto-instrumentation failed (non-fatal): %s", e)
 
@@ -180,10 +180,20 @@ def _init_instrumentation() -> None:
 # ── Public API: trace() ──────────────────────────────────────────────────────
 
 
+def _coerce_kind(kind: str | TraceKind) -> TraceKind:
+    """Accept either a TraceKind enum or a string like 'agent', 'tool', 'llm'."""
+    if isinstance(kind, TraceKind):
+        return kind
+    try:
+        return TraceKind(kind.lower())
+    except ValueError:
+        return TraceKind.CUSTOM
+
+
 @contextmanager
 def trace(
     name: str,
-    kind: TraceKind = TraceKind.CUSTOM,
+    kind: str | TraceKind = TraceKind.CUSTOM,
     input: Any | None = None,
     *,
     model: str | None = None,
@@ -196,27 +206,22 @@ def trace(
     model_parameters: dict[str, Any] | None = None,
     prompt_id: str | None = None,
 ) -> Generator[Span, None, None]:
-    """Create a traced span. Everything is a span with a kind."""
-    if not _initialized or not _processor:
-        yield from _run_span(
-            name,
-            kind,
-            input,
-            model,
-            provider,
-            tags,
-            level,
-            version,
-            release,
-            model_parameters,
-            prompt_id,
-            attributes,
-            processor=None,
-        )
-        return
+    """Create a traced span.
+
+    Minimal usage::
+
+        with etrace.trace("my_agent", kind="agent") as span:
+            result = do_work()
+            span.output = result
+
+    The ``kind`` accepts strings ("agent", "tool", "llm", ...) or TraceKind enum.
+    All other parameters are optional — set them on the span object if needed.
+    """
+    resolved_kind = _coerce_kind(kind)
+    proc = _processor if _initialized else None
 
     span, token, start = _start_span(
-        name, kind, input, model, provider, tags, level, version, release, model_parameters, prompt_id, attributes
+        name, resolved_kind, input, model, provider, tags, level, version, release, model_parameters, prompt_id, attributes,
     )
     try:
         yield span
@@ -227,40 +232,7 @@ def trace(
         span.status = TraceStatus.ERROR
         raise
     finally:
-        _finish_span(span, token, start)
-
-
-def _run_span(
-    name: str,
-    kind: TraceKind,
-    input: Any | None,
-    model: str | None,
-    provider: str | None,
-    tags: list[str] | None,
-    level: TraceLevel | None,
-    version: str | None,
-    release: str | None,
-    model_parameters: dict[str, Any] | None,
-    prompt_id: str | None,
-    attributes: dict[str, Any] | None,
-    *,
-    processor: SpanProcessor | None = None,
-) -> Generator[Span, None, None]:
-    """Unified span lifecycle for both active and noop mode."""
-    span, token, start = _start_span(
-        name, kind, input, model, provider, tags, level, version, release, model_parameters, prompt_id, attributes
-    )
-    try:
-        yield span
-        if span.status == TraceStatus.UNSET:
-            span.status = TraceStatus.OK
-    except Exception as e:
-        span.error = TraceError(message=str(e), type=type(e).__name__)
-        span.status = TraceStatus.ERROR
-        raise
-    finally:
-        _finish_span(span, token, start, processor=processor)
-
+        _finish_span(span, token, start, processor=proc)
 
 def _start_span(
     name: str,
@@ -326,20 +298,32 @@ def observe(
     _func: F | None = None,
     *,
     name: str | None = None,
-    kind: TraceKind = TraceKind.CUSTOM,
+    kind: str | TraceKind = TraceKind.CUSTOM,
     capture_input: bool = True,
     capture_output: bool = True,
     **kwargs: Any,
 ) -> Callable[[F], F] | F:
-    """Decorator to trace any function."""
+    """Decorator to trace any function.
+
+    Minimal usage::
+
+        @etrace.observe(kind="tool")
+        def search(query: str) -> str:
+            ...
+
+    Automatically captures function arguments as input and return value as output.
+    The ``kind`` accepts strings ("agent", "tool", "llm", ...) or TraceKind enum.
+    """
+
+    resolved_kind = _coerce_kind(kind)
 
     def decorator(fn: F) -> F:
-        tname = name or fn.__name__ or kind.value
+        tname = name or fn.__name__ or resolved_kind.value
 
         @functools.wraps(fn)
         def sync_wrapper(*args: Any, **kw: Any) -> Any:
             captured = _capture_args(fn, args, kw) if capture_input else None
-            with trace(tname, kind=kind, input=captured, **kwargs) as span:
+            with trace(tname, kind=resolved_kind, input=captured, **kwargs) as span:
                 result = fn(*args, **kw)
                 if capture_output:
                     span.output = result
@@ -348,7 +332,7 @@ def observe(
         @functools.wraps(fn)
         async def async_wrapper(*args: Any, **kw: Any) -> Any:
             captured = _capture_args(fn, args, kw) if capture_input else None
-            with trace(tname, kind=kind, input=captured, **kwargs) as span:
+            with trace(tname, kind=resolved_kind, input=captured, **kwargs) as span:
                 result = await fn(*args, **kw)
                 if capture_output:
                     span.output = result

@@ -1,0 +1,17 @@
+[project]
+name = "etrace-deep-research-agent"
+version = "0.1.0"
+description = "Deep research agent example instrumented with etrace and OTEL."
+requires-python = ">=3.11"
+dependencies = [
+    "deepagents>=0.1.0",
+    "etrace[otel]",
+    "httpx>=0.28.0",
+    "langchain-core>=1.0.0",
+    "langchain-openai>=1.0.0",
+    "markdownify>=1.2.0",
+    "tavily-python>=0.7.0",
+]
+
+[tool.uv.sources]
+etrace = { path = "../../sdks/python", editable = true }

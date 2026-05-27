@@ -3,7 +3,7 @@ Auto-instrumentation tests.
 
 Tests the OpenAI and Anthropic auto-instrumentation wrappers using
 mocked SDK response objects. Verifies that patched calls:
-  - Create correctly named OTel spans
+  - Create correctly named etrace spans
   - Set gen_ai.* semantic convention attributes
   - Extract token usage from responses
   - Auto-calculate cost from the pricing catalog
@@ -12,22 +12,20 @@ mocked SDK response objects. Verifies that patched calls:
   - Are reversible via uninstrument()
 
 No real API keys or network calls needed — SDK response objects are mocked.
+Uses etrace's InMemoryExporter (not OTel).
 """
 
 from __future__ import annotations
 
 import json
-
-# Import shared test infra from conftest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from opentelemetry.trace.status import StatusCode
 
+import etrace
+from etrace._exporter import InMemoryExporter
+from etrace._types import Span, TraceStatus
 from etrace.instrumentation import (
     AnthropicInstrumentor,
     OpenAIInstrumentor,
@@ -37,13 +35,7 @@ from etrace.instrumentation import (
 
 
 def _make_exporter():
-    return InMemorySpanExporter()
-
-
-def _make_tracer(exporter):
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    return provider.get_tracer("test")
+    return InMemoryExporter()
 
 
 # ── Mock response factories ──────────────────────────────────────────────────
@@ -102,11 +94,11 @@ def _anthropic_message_response(
 
 
 class TestOpenAIInstrumentation:
-    """Tests for OpenAIInstrumentor patching and span emission."""
+    """Tests for OpenAIInstrumentor patching and etrace span emission."""
 
-    def _instrument(self, exporter):
-        """Instrument mock OpenAI classes and return the instrumentor + tracer."""
-        tracer = _make_tracer(exporter)
+    def _instrument(self, exporter: InMemoryExporter, calc_costs: bool = False):
+        """Instrument mock OpenAI classes and return the instrumentor + mocks."""
+        etrace.init(exporters=[exporter], auto_instrument={"llm": False})
         inst = OpenAIInstrumentor()
 
         mock_sync_chat = MagicMock(return_value=_openai_chat_response())
@@ -135,18 +127,19 @@ class TestOpenAIInstrumentation:
         )
         patches.start()
 
-        inst.instrument(tracer, calc_costs=False)
+        inst.instrument(calc_costs=calc_costs)
 
-        # Return everything needed for assertions + cleanup
         return inst, mock_sync_chat, mock_sync_emb, patches
 
     def _cleanup(self, inst, patches):
         inst.uninstrument()
         patches.stop()
+        etrace.shutdown()
+
+    def _get_spans(self, exporter: InMemoryExporter) -> list[Span]:
+        return exporter.get_finished_spans()
 
     def test_instrument_returns_true_on_success(self):
-        exporter = _make_exporter()
-        tracer = _make_tracer(exporter)
         inst = OpenAIInstrumentor()
 
         chat_mod = MagicMock()
@@ -166,24 +159,9 @@ class TestOpenAIInstrumentation:
                 "openai.resources.embeddings": emb_mod,
             },
         ):
-            result = inst.instrument(tracer)
+            result = inst.instrument()
             assert result is True
             inst.uninstrument()
-
-        @pytest.mark.skipif(
-            __import__("importlib.util").util.find_spec("openai") is not None,
-            reason="openai already imported in process",
-        )
-        def test_instrument_returns_false_if_not_installed(self):
-            """When openai is not importable, instrument() returns False."""
-            exporter = _make_exporter()
-            tracer = _make_tracer(exporter)
-            inst = OpenAIInstrumentor()
-
-            # Patch the import inside instrument() to raise ImportError
-            with patch.dict("sys.modules", {"openai": None}):
-                result = inst.instrument(tracer)
-                assert result is False
 
     def test_uninstrument_restores_originals(self):
         exporter = _make_exporter()
@@ -191,7 +169,7 @@ class TestOpenAIInstrumentation:
 
         from openai.resources.chat.completions import Completions
 
-        assert hasattr(Completions.create, "_evaris_original")
+        assert hasattr(Completions.create, "_etrace_original")
 
         self._cleanup(inst, p)
         assert Completions.create is mock_chat
@@ -204,7 +182,7 @@ class TestOpenAIInstrumentation:
 
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        spans = exporter.get_finished_spans()
+        spans = self._get_spans(exporter)
         assert len(spans) == 1
         assert spans[0].name == "openai.chat"
         self._cleanup(inst, p)
@@ -217,10 +195,10 @@ class TestOpenAIInstrumentation:
 
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.system"] == "openai"
         assert span.attributes["gen_ai.request.model"] == "gpt-4o"
-        assert span.attributes["evaris.kind"] == "llm"
+        assert span.attributes["etrace.kind"] == "llm"
         self._cleanup(inst, p)
 
     def test_chat_span_has_usage_tokens(self):
@@ -236,7 +214,7 @@ class TestOpenAIInstrumentation:
         )
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.usage.prompt_tokens"] == 200
         assert span.attributes["gen_ai.usage.completion_tokens"] == 100
         assert span.attributes["gen_ai.usage.total_tokens"] == 300
@@ -251,7 +229,7 @@ class TestOpenAIInstrumentation:
         mock_chat.return_value = _openai_chat_response(cached_tokens=500)
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.usage.cache_read_tokens"] == 500
         self._cleanup(inst, p)
 
@@ -264,7 +242,7 @@ class TestOpenAIInstrumentation:
         mock_chat.return_value = _openai_chat_response(reasoning_tokens=1000)
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.usage.reasoning_tokens"] == 1000
         self._cleanup(inst, p)
 
@@ -277,8 +255,9 @@ class TestOpenAIInstrumentation:
         mock_chat.return_value = _openai_chat_response(content="Test response")
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.output"] == "Test response"
+        assert span.output == "Test response"
         self._cleanup(inst, p)
 
     def test_chat_span_captures_input_messages(self):
@@ -290,7 +269,7 @@ class TestOpenAIInstrumentation:
         msgs = [{"role": "user", "content": "hi"}]
         Completions.create(model="gpt-4o", messages=msgs)
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert "gen_ai.input.messages" in span.attributes
         parsed = json.loads(span.attributes["gen_ai.input.messages"])
         assert parsed == msgs
@@ -304,8 +283,8 @@ class TestOpenAIInstrumentation:
 
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
-        assert span.status.status_code == StatusCode.OK
+        span = self._get_spans(exporter)[0]
+        assert span.status == TraceStatus.OK
         self._cleanup(inst, p)
 
     def test_chat_span_error_status_on_exception(self):
@@ -319,10 +298,10 @@ class TestOpenAIInstrumentation:
         with pytest.raises(ValueError, match="bad_api_key"):
             Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
-        assert span.status.status_code == StatusCode.ERROR
-        assert len(span.events) >= 1
-        assert span.events[0].name == "exception"
+        span = self._get_spans(exporter)[0]
+        assert span.status == TraceStatus.ERROR
+        assert span.error is not None
+        assert "bad_api_key" in span.error.message
         self._cleanup(inst, p)
 
     def test_chat_streaming_flag(self):
@@ -333,7 +312,7 @@ class TestOpenAIInstrumentation:
 
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}], stream=True)
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes.get("gen_ai.streaming") is True
         assert "gen_ai.usage.prompt_tokens" not in span.attributes
         self._cleanup(inst, p)
@@ -347,7 +326,8 @@ class TestOpenAIInstrumentation:
         mock_chat.return_value = _openai_chat_response(model="gpt-4o-2024-08-06")
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
+        assert span.model == "gpt-4o-2024-08-06"
         assert "gen_ai.usage.prompt_tokens" in span.attributes
         self._cleanup(inst, p)
 
@@ -359,7 +339,7 @@ class TestOpenAIInstrumentation:
 
         Embeddings.create(model="text-embedding-3-small", input="hello")
 
-        spans = exporter.get_finished_spans()
+        spans = self._get_spans(exporter)
         assert len(spans) == 1
         assert spans[0].name == "openai.embeddings"
         self._cleanup(inst, p)
@@ -372,8 +352,8 @@ class TestOpenAIInstrumentation:
 
         Embeddings.create(model="text-embedding-3-small", input="hello")
 
-        span = exporter.get_finished_spans()[0]
-        assert span.attributes["evaris.kind"] == "embedding"
+        span = self._get_spans(exporter)[0]
+        assert span.attributes["etrace.kind"] == "embedding"
         assert span.attributes["gen_ai.system"] == "openai"
         assert span.attributes["gen_ai.request.model"] == "text-embedding-3-small"
         self._cleanup(inst, p)
@@ -383,7 +363,7 @@ class TestOpenAIInstrumentation:
         mock_sync_emb = MagicMock(return_value=_openai_embedding_response(prompt_tokens=30, total_tokens=30))
         mock_sync_chat = MagicMock(return_value=_openai_chat_response())
 
-        tracer = _make_tracer(exporter)
+        etrace.init(exporters=[exporter], auto_instrument={"llm": False})
         inst = OpenAIInstrumentor()
 
         chat_completions_mod = MagicMock()
@@ -404,23 +384,23 @@ class TestOpenAIInstrumentation:
             },
         )
         p.start()
-        inst.instrument(tracer, calc_costs=False)
+        inst.instrument(calc_costs=False)
 
         from openai.resources.embeddings import Embeddings
 
         Embeddings.create(model="text-embedding-3-small", input="hello")
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.usage.prompt_tokens"] == 30
         assert span.attributes["gen_ai.usage.completion_tokens"] == 0
         assert span.attributes["gen_ai.usage.total_tokens"] == 30
         inst.uninstrument()
         p.stop()
+        etrace.shutdown()
 
     def test_chat_with_cost_calculation(self):
-        """When calc_costs=True and model has pricing, cost attributes are set."""
+        """When calc_costs=True and model has pricing, cost attributes and usage are set."""
         exporter = _make_exporter()
-        tracer = _make_tracer(exporter)
         inst = OpenAIInstrumentor()
 
         mock_chat = MagicMock(
@@ -438,6 +418,8 @@ class TestOpenAIInstrumentation:
         emb_mod.Embeddings.create = MagicMock()
         emb_mod.AsyncEmbeddings.create = MagicMock()
 
+        etrace.init(exporters=[exporter], auto_instrument={"llm": False})
+
         p = patch.dict(
             "sys.modules",
             {
@@ -449,29 +431,31 @@ class TestOpenAIInstrumentation:
             },
         )
         p.start()
-        inst.instrument(tracer, calc_costs=True)
+        inst.instrument(calc_costs=True)
 
         from openai.resources.chat.completions import Completions
 
         Completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
-        assert "gen_ai.usage.cost" in span.attributes
-        assert span.attributes["gen_ai.usage.cost"] > 0
-        assert "gen_ai.usage.input_cost" in span.attributes
-        assert "gen_ai.usage.output_cost" in span.attributes
+        span = self._get_spans(exporter)[0]
+        # Usage should be populated via set_usage()
+        assert span.usage is not None
+        assert span.usage.total_cost > 0
+        assert span.usage.input_cost > 0
+        assert span.usage.output_cost > 0
         inst.uninstrument()
         p.stop()
+        etrace.shutdown()
 
 
 # ── Anthropic Tests ──────────────────────────────────────────────────────────
 
 
 class TestAnthropicInstrumentation:
-    """Tests for AnthropicInstrumentor patching and span emission."""
+    """Tests for AnthropicInstrumentor patching and etrace span emission."""
 
-    def _instrument(self, exporter, calc_costs=False):
-        tracer = _make_tracer(exporter)
+    def _instrument(self, exporter: InMemoryExporter, calc_costs: bool = False):
+        etrace.init(exporters=[exporter], auto_instrument={"llm": False})
         inst = AnthropicInstrumentor()
 
         mock_sync = MagicMock(return_value=_anthropic_message_response())
@@ -491,33 +475,23 @@ class TestAnthropicInstrumentation:
         )
         patches.start()
 
-        inst.instrument(tracer, calc_costs=calc_costs)
+        inst.instrument(calc_costs=calc_costs)
 
         return inst, mock_sync, patches
 
     def _cleanup(self, inst, patches):
         inst.uninstrument()
         patches.stop()
+        etrace.shutdown()
+
+    def _get_spans(self, exporter: InMemoryExporter) -> list[Span]:
+        return exporter.get_finished_spans()
 
     def test_instrument_returns_true(self):
         exporter = _make_exporter()
         inst, _, p = self._instrument(exporter)
         assert len(inst._originals) > 0
         self._cleanup(inst, p)
-
-        @pytest.mark.skipif(
-            __import__("importlib.util").util.find_spec("anthropic") is not None,
-            reason="anthropic already imported in process",
-        )
-        def test_instrument_returns_false_if_not_installed(self):
-            """When anthropic is not importable, instrument() returns False."""
-            exporter = _make_exporter()
-            tracer = _make_tracer(exporter)
-            inst = AnthropicInstrumentor()
-
-            with patch.dict("sys.modules", {"anthropic": None}):
-                result = inst.instrument(tracer)
-                assert result is False
 
     def test_messages_span_created(self):
         exporter = _make_exporter()
@@ -527,7 +501,7 @@ class TestAnthropicInstrumentation:
 
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        spans = exporter.get_finished_spans()
+        spans = self._get_spans(exporter)
         assert len(spans) == 1
         assert spans[0].name == "anthropic.messages"
         self._cleanup(inst, p)
@@ -540,10 +514,10 @@ class TestAnthropicInstrumentation:
 
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.system"] == "anthropic"
         assert span.attributes["gen_ai.request.model"] == "claude-sonnet-4-20250514"
-        assert span.attributes["evaris.kind"] == "llm"
+        assert span.attributes["etrace.kind"] == "llm"
         self._cleanup(inst, p)
 
     def test_messages_span_has_usage_tokens(self):
@@ -558,7 +532,7 @@ class TestAnthropicInstrumentation:
         )
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.usage.prompt_tokens"] == 80
         assert span.attributes["gen_ai.usage.completion_tokens"] == 40
         assert span.attributes["gen_ai.usage.total_tokens"] == 120
@@ -573,7 +547,7 @@ class TestAnthropicInstrumentation:
         mock_sync.return_value = _anthropic_message_response(cache_read=500, cache_creation=100)
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.usage.cache_read_tokens"] == 500
         assert span.attributes["gen_ai.usage.cache_write_tokens"] == 100
         self._cleanup(inst, p)
@@ -587,8 +561,9 @@ class TestAnthropicInstrumentation:
         mock_sync.return_value = _anthropic_message_response(text="Test response from Claude")
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes["gen_ai.output"] == "Test response from Claude"
+        assert span.output == "Test response from Claude"
         self._cleanup(inst, p)
 
     def test_messages_span_captures_input(self):
@@ -599,7 +574,7 @@ class TestAnthropicInstrumentation:
 
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert "gen_ai.input.messages" in span.attributes
         self._cleanup(inst, p)
 
@@ -611,8 +586,8 @@ class TestAnthropicInstrumentation:
 
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
-        assert span.status.status_code == StatusCode.OK
+        span = self._get_spans(exporter)[0]
+        assert span.status == TraceStatus.OK
         self._cleanup(inst, p)
 
     def test_messages_span_error_on_exception(self):
@@ -626,9 +601,9 @@ class TestAnthropicInstrumentation:
         with pytest.raises(ConnectionError, match="timeout"):
             Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
-        assert span.status.status_code == StatusCode.ERROR
-        assert len(span.events) >= 1
+        span = self._get_spans(exporter)[0]
+        assert span.status == TraceStatus.ERROR
+        assert span.error is not None
         self._cleanup(inst, p)
 
     def test_messages_streaming_flag(self):
@@ -639,7 +614,7 @@ class TestAnthropicInstrumentation:
 
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}], stream=True)
 
-        span = exporter.get_finished_spans()[0]
+        span = self._get_spans(exporter)[0]
         assert span.attributes.get("gen_ai.streaming") is True
         assert "gen_ai.usage.prompt_tokens" not in span.attributes
         self._cleanup(inst, p)
@@ -653,8 +628,9 @@ class TestAnthropicInstrumentation:
         mock_sync.return_value = _anthropic_message_response(model="claude-sonnet-4-20250514")
         Messages.create(model="claude-3.5-sonnet", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
-        assert span.attributes["gen_ai.request.model"] == "claude-3.5-sonnet"
+        span = self._get_spans(exporter)[0]
+        # Response model is used for usage/cost, request model kept in attrs
+        assert span.model == "claude-sonnet-4-20250514"
         self._cleanup(inst, p)
 
     def test_messages_with_cost_calculation(self):
@@ -670,9 +646,9 @@ class TestAnthropicInstrumentation:
         )
         Messages.create(model="claude-sonnet-4-20250514", messages=[{"role": "user", "content": "hi"}])
 
-        span = exporter.get_finished_spans()[0]
-        assert "gen_ai.usage.cost" in span.attributes
-        assert span.attributes["gen_ai.usage.cost"] > 0
+        span = self._get_spans(exporter)[0]
+        assert span.usage is not None
+        assert span.usage.total_cost > 0
         self._cleanup(inst, p)
 
     def test_uninstrument_restores_originals(self):
@@ -682,7 +658,7 @@ class TestAnthropicInstrumentation:
         from anthropic.resources.messages import Messages
 
         patched = Messages.create
-        assert hasattr(patched, "_evaris_original")
+        assert hasattr(patched, "_etrace_original")
 
         self._cleanup(inst, p)
         assert Messages.create is mock_sync
@@ -699,8 +675,6 @@ class TestBaseInstrumentor:
         inst.uninstrument()  # Should not raise
 
     def test_patch_wraps_and_stores_original(self):
-        exporter = _make_exporter()
-        _make_tracer(exporter)
         inst = OpenAIInstrumentor()
 
         class FakeTarget:

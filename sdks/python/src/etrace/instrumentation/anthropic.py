@@ -1,7 +1,12 @@
-"""Anthropic auto-instrumentor."""
+"""Anthropic auto-instrumentor.
+
+Patches Anthropic messages (sync + async).
+Uses etrace spans directly (no OTel dependency).
+"""
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, ClassVar
 
@@ -18,7 +23,7 @@ class AnthropicInstrumentor(BaseInstrumentor):
     name: ClassVar[str] = "anthropic"
     target_packages: ClassVar[list[str]] = ["anthropic"]
 
-    def instrument(self, tracer: Any, calc_costs: bool = True) -> bool:
+    def instrument(self, calc_costs: bool = True) -> bool:
         try:
             from anthropic.resources.messages import AsyncMessages, Messages
         except ImportError:
@@ -30,7 +35,6 @@ class AnthropicInstrumentor(BaseInstrumentor):
                 Messages,
                 "create",
                 self._create_llm_wrapper_factory(
-                    tracer,
                     "anthropic.messages",
                     "anthropic",
                     self._process_messages,
@@ -42,7 +46,6 @@ class AnthropicInstrumentor(BaseInstrumentor):
                 AsyncMessages,
                 "create",
                 self._create_llm_wrapper_factory(
-                    tracer,
                     "anthropic.messages",
                     "anthropic",
                     self._process_messages,
@@ -65,13 +68,10 @@ class AnthropicInstrumentor(BaseInstrumentor):
         kwargs: dict[str, Any],
         calc_costs: bool,
     ) -> None:
-        model = kwargs.get("model", "")
-        resp_model = getattr(result, "model", None)
-        if resp_model:
-            model = resp_model
+        model = self._resolve_model(result, str(kwargs.get("model", "")))
 
         if kwargs.get("stream", False):
-            span.set_attribute("gen_ai.streaming", True)
+            span.attributes["gen_ai.streaming"] = True
             return
 
         usage = getattr(result, "usage", None)
@@ -94,8 +94,22 @@ class AnthropicInstrumentor(BaseInstrumentor):
         try:
             content = getattr(result, "content", None)
             if content:
-                text = "".join(block.text for block in content if hasattr(block, "text") and block.text)
+                text = "".join(
+                    block.text for block in content if hasattr(block, "text") and block.text
+                )
                 if text:
-                    span.set_attribute("gen_ai.output", text[:MAX_ATTR_LEN])
+                    self._capture_output(span, text)
+                else:
+                    # When no text, the LLM is requesting tool use.
+                    tool_blocks = [
+                        b for b in content
+                        if getattr(b, "type", None) == "tool_use"
+                    ]
+                    if tool_blocks:
+                        tc_data = [
+                            {"name": getattr(b, "name", ""), "input": getattr(b, "input", {})}
+                            for b in tool_blocks
+                        ]
+                        self._capture_output(span, json.dumps(tc_data))
         except Exception:
             pass

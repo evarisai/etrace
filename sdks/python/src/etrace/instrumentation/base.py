@@ -1,4 +1,13 @@
-"""Base class for LLM provider auto-instrumentors."""
+"""Base class for LLM provider auto-instrumentors.
+
+Uses etrace spans directly (no OTel tracer dependency).
+Every instrumentor follows the same pattern:
+  1. Try to import the target package.
+  2. Patch specific methods with wrappers that emit etrace spans.
+  3. Extract usage (tokens) from the response.
+  4. Auto-calculate cost from the pricing catalog.
+  5. Restore originals on uninstrument().
+"""
 
 from __future__ import annotations
 
@@ -16,13 +25,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("etrace.instrumentation")
 
-try:
-    from opentelemetry import context as _otel_ctx
-    from opentelemetry import trace as _otel_trace
-except ImportError:
-    _otel_ctx = None  # type: ignore[assignment]
-    _otel_trace = None  # type: ignore[assignment]
-
 
 class BaseInstrumentor:
     """Base class for auto-instrumentation of LLM providers."""
@@ -32,8 +34,9 @@ class BaseInstrumentor:
 
     def __init__(self) -> None:
         self._originals: list[tuple[Any, str, Any]] = []
+        self._calc_costs: bool = True
 
-    def instrument(self, tracer: Any, calc_costs: bool = True) -> bool:
+    def instrument(self, calc_costs: bool = True) -> bool:
         raise NotImplementedError
 
     def uninstrument(self) -> None:
@@ -51,13 +54,14 @@ class BaseInstrumentor:
         original = getattr(obj, method)
         wrapped = factory(original)
         functools.update_wrapper(wrapped, original)
-        wrapped._evaris_original = original
+        wrapped._etrace_original = original
         setattr(obj, method, wrapped)
         self._originals.append((obj, method, original))
 
+    # ── Shared LLM call wrapper ──────────────────────────────────────────
+
     def _create_llm_wrapper_factory(
         self,
-        tracer: Any,
         span_name: str,
         provider: str,
         process_fn: Callable[[Any, Any, dict[str, Any], bool], None],
@@ -66,82 +70,102 @@ class BaseInstrumentor:
         kind: str = "llm",
         is_async: bool = False,
     ) -> Callable[[Any], Any]:
+        """Create a wrapper factory that uses etrace.trace() internally."""
         inst = self
+
+        def _trace_and_process(span, model, result, kwargs):
+            """Post-result processing shared by sync and async wrappers."""
+            if not span:
+                return
+            resolved_model = inst._resolve_model(result, model)
+            span.model = resolved_model
+            process_fn(span, result, kwargs, calc_costs)
 
         def factory(original: Any) -> Any:
             if is_async:
 
                 @functools.wraps(original)
                 async def wrapper(*args: Any, **kwargs: Any) -> Any:
-                    span, tok = inst._start_llm(tracer, span_name, provider, kwargs, kind=kind)
-                    try:
+                    from .. import trace as etrace_trace, get_current_span
+                    from .._types import TraceKind
+
+                    trace_kind = TraceKind(kind) if kind in ("llm", "embedding") else TraceKind.LLM
+                    model = str(kwargs.get("model", ""))
+
+                    with etrace_trace(
+                        span_name,
+                        kind=trace_kind,
+                        model=model,
+                        provider=provider,
+                        input=kwargs.get("messages"),
+                    ):
+                        span = get_current_span()
+                        if span:
+                            inst._set_semconv_attrs(span, provider, model)
+                            inst._capture_input(span, kwargs)
+
                         result = await original(*args, **kwargs)
-                    except Exception as exc:
-                        inst._end_llm(span, tok, error=exc)
-                        raise
-                    process_fn(span, result, kwargs, calc_costs)
-                    inst._end_llm(span, tok)
-                    return result
+                        _trace_and_process(span, model, result, kwargs)
+                        return result
 
                 return wrapper
             else:
 
                 @functools.wraps(original)
                 def wrapper(*args: Any, **kwargs: Any) -> Any:
-                    span, tok = inst._start_llm(tracer, span_name, provider, kwargs, kind=kind)
-                    try:
+                    from .. import trace as etrace_trace, get_current_span
+                    from .._types import TraceKind
+
+                    trace_kind = TraceKind(kind) if kind in ("llm", "embedding") else TraceKind.LLM
+                    model = str(kwargs.get("model", ""))
+
+                    with etrace_trace(
+                        span_name,
+                        kind=trace_kind,
+                        model=model,
+                        provider=provider,
+                        input=kwargs.get("messages"),
+                    ):
+                        span = get_current_span()
+                        if span:
+                            inst._set_semconv_attrs(span, provider, model)
+                            inst._capture_input(span, kwargs)
+
                         result = original(*args, **kwargs)
-                    except Exception as exc:
-                        inst._end_llm(span, tok, error=exc)
-                        raise
-                    process_fn(span, result, kwargs, calc_costs)
-                    inst._end_llm(span, tok)
-                    return result
+                        _trace_and_process(span, model, result, kwargs)
+                        return result
 
                 return wrapper
 
         return factory
 
-    def _start_llm(
-        self,
-        tracer: Any,
-        span_name: str,
-        provider: str,
-        kwargs: dict[str, Any],
-        *,
-        kind: str = "llm",
-    ) -> tuple[Any, Any]:
-        model = kwargs.get("model", "")
-        attrs: dict[str, Any] = {
-            "evaris.kind": kind,
-            "gen_ai.system": provider,
-            "gen_ai.request.model": str(model),
-        }
+    # ── Helpers ───────────────────────────────────────────────────────────
 
+    def _set_semconv_attrs(self, span: Any, provider: str, model: str) -> None:
+        """Set semantic convention attributes on an etrace span."""
+        span.attributes["gen_ai.system"] = provider
+        if model:
+            span.attributes["gen_ai.request.model"] = model
+        span.attributes["etrace.kind"] = span.kind.value
+
+    def _capture_input(self, span: Any, kwargs: dict[str, Any]) -> None:
+        """Capture input messages on the span."""
         messages = kwargs.get("messages")
         if messages:
             with contextlib.suppress(Exception):
-                attrs["gen_ai.input.messages"] = json.dumps(messages, default=str)[:MAX_ATTR_LEN]
+                span.attributes["gen_ai.input.messages"] = json.dumps(messages, default=str)[
+                    :MAX_ATTR_LEN
+                ]
 
-        span = tracer.start_span(span_name, attributes=attrs)
-        ctx = _otel_trace.set_span_in_context(span)
-        token = _otel_ctx.attach(ctx)
-        return span, token
+    def _capture_output(self, span: Any, text: str) -> None:
+        """Capture output text on the span."""
+        span.attributes["gen_ai.output"] = text[:MAX_ATTR_LEN]
+        span.output = text[:MAX_ATTR_LEN]
 
-    def _end_llm(
-        self,
-        span: Any,
-        ctx_token: Any,
-        error: BaseException | None = None,
-    ) -> None:
-        if error is not None:
-            span.set_status(_otel_trace.StatusCode.ERROR, str(error))
-            span.record_exception(error)
-        else:
-            span.set_status(_otel_trace.StatusCode.OK)
-
-        _otel_ctx.detach(ctx_token)
-        span.end()
+    def _resolve_model(self, result: Any, request_model: str) -> str:
+        """Use response model if available, otherwise fall back to request model."""
+        resp_model = getattr(result, "model", None)
+        return resp_model if resp_model else request_model
 
     def _set_usage_and_cost(
         self,
@@ -155,28 +179,27 @@ class BaseInstrumentor:
         cache_write_tokens: int = 0,
         calc_costs: bool = True,
     ) -> None:
-        span.set_attribute("gen_ai.usage.prompt_tokens", prompt_tokens)
-        span.set_attribute("gen_ai.usage.completion_tokens", completion_tokens)
-        span.set_attribute(
-            "gen_ai.usage.total_tokens",
-            total_tokens or (prompt_tokens + completion_tokens),
-        )
+        """Set token usage attributes and auto-calculate cost on an etrace span."""
+        total = total_tokens or (prompt_tokens + completion_tokens)
+
+        span.attributes["gen_ai.usage.prompt_tokens"] = prompt_tokens
+        span.attributes["gen_ai.usage.completion_tokens"] = completion_tokens
+        span.attributes["gen_ai.usage.total_tokens"] = total
         if cached_tokens:
-            span.set_attribute("gen_ai.usage.cache_read_tokens", cached_tokens)
+            span.attributes["gen_ai.usage.cache_read_tokens"] = cached_tokens
         if reasoning_tokens:
-            span.set_attribute("gen_ai.usage.reasoning_tokens", reasoning_tokens)
+            span.attributes["gen_ai.usage.reasoning_tokens"] = reasoning_tokens
         if cache_write_tokens:
-            span.set_attribute("gen_ai.usage.cache_write_tokens", cache_write_tokens)
-        if calc_costs and model:
-            costs = calculate_cost(
-                model,
-                prompt_tokens,
-                completion_tokens,
-                cached_tokens=cached_tokens,
-                reasoning_tokens=reasoning_tokens,
-            )
-            if costs:
-                span.set_attribute("gen_ai.usage.cost", costs.get("total_cost", 0))
-                span.set_attribute("gen_ai.usage.input_cost", costs.get("input_cost", 0))
-                span.set_attribute("gen_ai.usage.output_cost", costs.get("output_cost", 0))
-                span.set_attribute("gen_ai.usage.calculated_cost", costs.get("total_cost", 0))
+            span.attributes["gen_ai.usage.cache_write_tokens"] = cache_write_tokens
+
+        # Use etrace's set_usage for proper cost tracking
+        from .. import set_usage
+
+        set_usage(
+            input_tokens=prompt_tokens,
+            output_tokens=completion_tokens,
+            total_tokens=total,
+            cached_tokens=cached_tokens,
+            reasoning_tokens=reasoning_tokens,
+            model=model,
+        )
