@@ -1,3 +1,12 @@
+"""Deep research agent example — idiomatic etrace usage.
+
+Key principles:
+- etrace.init() auto-detects LangChain, disables LLM auto-instrument
+- @etrace.agent / @etrace.tool decorators auto-capture input/output
+- etrace.langchain_handler() creates a fresh handler per invocation
+  that inherits the active trace context
+- No manual trace(), no manual flush(), no auto_instrument config
+"""
 from __future__ import annotations
 
 import os
@@ -20,6 +29,8 @@ from markdownify import markdownify
 from tavily import TavilyClient
 
 
+# ── Environment ───────────────────────────────────────────────────────────────
+
 ZAI_OPENAI_BASE_URL = "https://api.z.ai/api/paas/v4/"
 DEFAULT_STUDIO_OTLP_ENDPOINT = "http://localhost:3001/v1/traces"
 
@@ -36,18 +47,6 @@ def configure_environment() -> None:
     os.environ.setdefault("OTEL_SERVICE_NAME", "etrace-deep-research-agent")
 
 
-def init_tracing() -> None:
-    etrace.init(
-        service_name="etrace-deep-research-agent",
-        environment=os.environ.get("ETRACE_ENVIRONMENT", "local"),
-        exporters=[OtelExporter()],
-        calculate_costs=True,
-        # Disable LLM auto-instrumentation — the LangChain callback
-        # handler captures LLM spans with proper hierarchy instead.
-        auto_instrument={"llm": False},
-    )
-
-
 def require_env(name: str) -> str:
     value = os.environ.get(name)
     if not value:
@@ -55,10 +54,24 @@ def require_env(name: str) -> str:
     return value
 
 
+# ── Tracing setup ─────────────────────────────────────────────────────────────
+# One call. Auto-detects LangChain → disables LLM auto-instrument internally.
+# ──────────────────────────────────────────────────────────────────────────────
+
+def init_tracing() -> None:
+    etrace.init(
+        service_name="etrace-deep-research-agent",
+        environment=os.environ.get("ETRACE_ENVIRONMENT", "local"),
+        exporters=[OtelExporter()],
+        calculate_costs=True,
+    )
+
+
 # ── Tools ─────────────────────────────────────────────────────────────────────
-# Each tool is a plain function decorated with @etrace.tool which auto-captures
-# the function arguments as span.input and the return value as span.output.
-# The LangChain @tool decorator is applied on top so LangGraph can use them.
+# Helper functions use @etrace.tool for auto-capture.
+# LangChain tools use @tool (LangChain's decorator) — the callback handler
+# traces them automatically. Nested @etrace.tool calls inside LangChain tools
+# inherit the handler's span context via _current_span bridging.
 # ──────────────────────────────────────────────────────────────────────────────
 
 tavily_client: TavilyClient | None = None
@@ -77,7 +90,7 @@ def fetch_webpage_content(url: str, timeout: float = 10.0) -> str:
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Safari/537.36"
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         )
     }
     try:
@@ -218,6 +231,30 @@ def build_agent():
     return model_name, agent
 
 
+# ── Main: the ideal API ──────────────────────────────────────────────────────
+# @etrace.agent auto-captures input (query) and output (answer).
+# etrace.langchain_handler() creates a handler inheriting the active trace.
+# No manual trace(), flush(), or auto_instrument config.
+# ──────────────────────────────────────────────────────────────────────────────
+
+@etrace.agent
+def deep_research(query: str) -> str:
+    """Run the deep research agent on a query."""
+    _, agent = build_agent()
+    result = agent.invoke(
+        {"messages": [HumanMessage(content=query)]},
+        config={"callbacks": [etrace.langchain_handler()]},
+    )
+
+    # Extract the final answer
+    messages = result.get("messages", [])
+    for msg in reversed(messages):
+        content = getattr(msg, "content", None)
+        if content:
+            return content
+    return "No answer found."
+
+
 def main() -> None:
     configure_environment()
     init_tracing()
@@ -226,35 +263,9 @@ def main() -> None:
         " ".join(sys.argv[1:])
         or "What are the main differences between RAG and fine-tuning for LLM applications?"
     )
-    model_name, agent = build_agent()
 
-    # Use the LangChain callback handler for proper LLM→Tool nesting.
-    # Auto-instrumentation still captures raw API calls but the callback
-    # handler provides the parent-child hierarchy via run_id / parent_run_id.
-    from etrace.langchain import EtraceLangChainHandler
-
-    with etrace.trace("deep_research_agent", kind="agent") as span:
-        span.input = question
-        handler = EtraceLangChainHandler()
-        result = agent.invoke(
-            {"messages": [HumanMessage(content=question)]},
-            config={"callbacks": [handler]},
-        )
-
-        # Capture the final answer as the root span output
-        messages = result.get("messages", [])
-        for msg in reversed(messages):
-            content = getattr(msg, "content", None)
-            if content:
-                span.output = content
-                break
-
-        handler.flush()
-
-    for msg in result.get("messages", []):
-        content = getattr(msg, "content", None)
-        if content:
-            print(content)
+    answer = deep_research(question)
+    print(answer)
 
     etrace.shutdown()
 

@@ -145,7 +145,23 @@ def init(
         }
 
         if auto_instrument is None:
-            auto_instrument = {"llm": True}
+            auto_instrument = {"llm": True, "langchain": True}
+
+        # Auto-detect LangChain: when langchain-core is installed the
+        # callback handler captures LLM spans with proper hierarchy, so
+        # the monkey-patching auto-instrumentor is redundant.
+        if auto_instrument.get("langchain", True):
+            try:
+                import langchain_core  # noqa: F401
+
+                if auto_instrument.get("llm", True):
+                    logger.info(
+                        "LangChain detected — disabling LLM auto-instrumentation "
+                        "(use etrace.langchain_handler() instead)"
+                    )
+                    auto_instrument["llm"] = False
+            except ImportError:
+                pass
 
         # Build processor pipeline
         if processors:
@@ -583,6 +599,31 @@ def shutdown() -> None:
 
 def is_initialized() -> bool:
     return _initialized
+
+
+# ── Framework helpers ─────────────────────────────────────────────────────────
+
+
+def langchain_handler() -> Any:
+    """Create a LangChain callback handler that inherits the active etrace context.
+
+    Returns a fresh :class:`~etrace.langchain.EtraceLangChainHandler` on every
+    call so that ``_current_span`` is captured correctly for the enclosing
+    ``etrace.trace()`` / ``@etrace.agent`` span.
+
+    Usage::
+
+        @etrace.agent
+        def my_agent(query: str):
+            result = agent.invoke(
+                {"messages": [...]},
+                config={"callbacks": [etrace.langchain_handler()]},
+            )
+            return result
+    """
+    from .langchain import EtraceLangChainHandler
+
+    return EtraceLangChainHandler()
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
