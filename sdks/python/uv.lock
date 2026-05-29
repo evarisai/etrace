@@ -213,7 +213,7 @@ wheels = [
 ]
 
 [[package]]
-name = "etrace"
+name = "etrace-py"
 version = "0.1.0"
 source = { editable = "." }
 
@@ -243,7 +243,7 @@ otel = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", marker = "extra == 'dev'" },
-    { name = "etrace", extras = ["otel"], marker = "extra == 'all'" },
+    { name = "etrace-py", extras = ["otel"], marker = "extra == 'all'" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "openai", marker = "extra == 'dev'" },
     { name = "opentelemetry-api", marker = "extra == 'dev'", specifier = ">=1.20" },
