@@ -1,0 +1,17 @@
+# Changelog
+
+## 0.1.0 (2026-05-29)
+
+### Initial launch
+
+- Zero-dependency core tracing: `trace()`, `agent()`, `tool()`, `llm()` and 14 more span-kind decorators
+- `observe()` universal decorator for manual instrumentation
+- `AsyncLocalStorage`-based context propagation with `setContext()` / `getContext()`
+- Auto-instrumentation for OpenAI and Anthropic SDKs via `BaseInstrumentor` monkey-patching
+- LangChain callback handler (`EtraceLangChainHandler`) for framework-native tracing
+- `RunTracker` for framework-agnostic run-based tracing with parent-child nesting
+- `InMemoryExporter`, `ConsoleExporter`, `OtelExporter` (OTLP/protobuf)
+- `SimpleProcessor`, `BatchProcessor`, `MultiProcessor` pipeline
+- Automatic cost calculation from model pricing catalog
+- Auto-shutdown on process exit (`SIGINT`, `SIGTERM`)
+- 193 tests passing

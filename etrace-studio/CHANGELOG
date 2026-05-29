@@ -1,0 +1,16 @@
+# Changelog
+
+## 0.1.0 (2026-05-29)
+
+### Initial launch
+
+- OTLP protobuf trace receiver for ingesting spans from etrace SDKs
+- Trace list with status, duration, token count, and cost summaries
+- ChatFlow overview: user prompts, LLM responses, and tool call pills
+- Span tree with inline timeline bars and expand/collapse
+- Flame timeline visualization
+- Resizable span detail panel with Input, Output, and Attributes sections
+- JSON tree viewer with expand/collapse and overflow-safe wrapping
+- Dark mode support
+- Seed traces for local development
+- Responsive layout with collapsible sidebar
