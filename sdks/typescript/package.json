@@ -1,5 +1,5 @@
 {
-  "name": "etrace",
+  "name": "@evaris/etrace",
   "version": "0.1.0",
   "description": "AI agent tracing library — zero-dep core, composable pipeline, auto-instruments LLM calls",
   "main": "./dist/index.js",

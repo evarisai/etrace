@@ -337,7 +337,32 @@ wheels = [
 ]
 
 [[package]]
-name = "etrace"
+name = "etrace-deep-research-agent"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "deepagents" },
+    { name = "etrace-py", extra = ["otel"] },
+    { name = "httpx" },
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+    { name = "markdownify" },
+    { name = "tavily-python" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "deepagents", specifier = ">=0.1.0" },
+    { name = "etrace-py", extras = ["otel"], editable = "../../sdks/python" },
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "langchain-core", specifier = ">=1.0.0" },
+    { name = "langchain-openai", specifier = ">=1.0.0" },
+    { name = "markdownify", specifier = ">=1.2.0" },
+    { name = "tavily-python", specifier = ">=0.7.0" },
+]
+
+[[package]]
+name = "etrace-py"
 version = "0.1.0"
 source = { editable = "../../sdks/python" }
 
@@ -351,7 +376,7 @@ otel = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", marker = "extra == 'dev'" },
-    { name = "etrace", extras = ["otel"], marker = "extra == 'all'" },
+    { name = "etrace-py", extras = ["otel"], marker = "extra == 'all'" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "openai", marker = "extra == 'dev'" },
     { name = "opentelemetry-api", marker = "extra == 'dev'", specifier = ">=1.20" },
@@ -365,31 +390,6 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'" },
 ]
 provides-extras = ["otel", "all", "dev"]
-
-[[package]]
-name = "etrace-deep-research-agent"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "deepagents" },
-    { name = "etrace", extra = ["otel"] },
-    { name = "httpx" },
-    { name = "langchain-core" },
-    { name = "langchain-openai" },
-    { name = "markdownify" },
-    { name = "tavily-python" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "deepagents", specifier = ">=0.1.0" },
-    { name = "etrace", extras = ["otel"], editable = "../../sdks/python" },
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "langchain-core", specifier = ">=1.0.0" },
-    { name = "langchain-openai", specifier = ">=1.0.0" },
-    { name = "markdownify", specifier = ">=1.2.0" },
-    { name = "tavily-python", specifier = ">=0.7.0" },
-]
 
 [[package]]
 name = "filetype"
