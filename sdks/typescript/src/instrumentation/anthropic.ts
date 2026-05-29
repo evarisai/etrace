@@ -97,6 +97,17 @@ export class AnthropicInstrumentor extends BaseInstrumentor {
           .join("");
         if (text) {
           this.captureOutput(span, text);
+        } else {
+          const toolCalls = content
+            .filter((block) => block.type === "tool_use")
+            .map((block) => ({
+              name: block.name ?? "",
+              arguments: block.input ?? {},
+            }));
+          if (toolCalls.length) {
+            span.output = toolCalls;
+            this.captureOutput(span, JSON.stringify(toolCalls));
+          }
         }
       }
     } catch {

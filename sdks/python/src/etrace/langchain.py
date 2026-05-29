@@ -22,15 +22,17 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
 from .tracing import RunTracker, _Run
 
 logger = logging.getLogger("etrace.langchain")
 
+if TYPE_CHECKING:
+    from uuid import UUID
+
 try:
-    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.callbacks import BaseCallbackHandler  # type: ignore[import-not-found]
 
     _HAS_LANGCHAIN = True
 except ImportError:
@@ -51,14 +53,12 @@ def _serialize_messages(messages: list[Any]) -> list[dict[str, Any]]:
         }
         tc = getattr(msg, "tool_calls", None)
         if tc:
-            entry["tool_calls"] = [
-                {"name": t.get("name"), "args": t.get("args")} for t in tc
-            ]
+            entry["tool_calls"] = [{"name": t.get("name"), "args": t.get("args")} for t in tc]
         result.append(entry)
     return result
 
 
-class EtraceLangChainHandler(BaseCallbackHandler):
+class EtraceLangChainHandler(BaseCallbackHandler):  # type: ignore[misc]
     """LangChain callback handler backed by :class:`RunTracker`.
 
     Maps LangChain's ``run_id`` / ``parent_run_id`` to the tracker's
@@ -69,8 +69,7 @@ class EtraceLangChainHandler(BaseCallbackHandler):
     def __init__(self) -> None:
         if not _HAS_LANGCHAIN:
             raise ImportError(
-                "langchain-core is required for EtraceLangChainHandler. "
-                "Install it with: pip install langchain-core"
+                "langchain-core is required for EtraceLangChainHandler. Install it with: pip install langchain-core"
             )
         self._tracker = RunTracker()
         self._last_llm_run_id: str | None = None
@@ -166,9 +165,7 @@ class EtraceLangChainHandler(BaseCallbackHandler):
                     usage = {
                         "prompt_tokens": prompt,
                         "completion_tokens": completion,
-                        "total_tokens": tu.get(
-                            "total_tokens", prompt + completion
-                        ),
+                        "total_tokens": tu.get("total_tokens", prompt + completion),
                     }
 
                 content = getattr(msg, "content", None)

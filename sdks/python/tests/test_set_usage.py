@@ -14,7 +14,6 @@ from etrace import calculate_usage_cost
 from etrace._exporter import InMemoryExporter
 from etrace._types import TraceKind, Usage
 
-
 # ── calculate_usage_cost() — pure function ────────────────────────────────────
 
 
@@ -85,8 +84,11 @@ class TestCalculateUsageCost:
 
     def test_preserves_all_token_fields(self):
         usage = Usage(
-            input=100, output=50, total=150,
-            cached_tokens=20, reasoning_tokens=10,
+            input=100,
+            output=50,
+            total=150,
+            cached_tokens=20,
+            reasoning_tokens=10,
         )
         result = calculate_usage_cost(usage, model="gpt-4o")
         assert result.input == 100
@@ -142,8 +144,10 @@ class TestSetUsageMutation:
     def test_cached_and_reasoning_tokens(self):
         with etrace.trace("test"):
             usage = etrace.set_usage(
-                input_tokens=100, output_tokens=50,
-                cached_tokens=30, reasoning_tokens=10,
+                input_tokens=100,
+                output_tokens=50,
+                cached_tokens=30,
+                reasoning_tokens=10,
             )
             assert usage.cached_tokens == 30
             assert usage.reasoning_tokens == 10
@@ -208,7 +212,7 @@ class TestSetUsageAutoCost:
         etrace.init(exporters=[exporter], calculate_costs=True, auto_instrument={"llm": False})
         try:
             with etrace.trace("llm", kind=TraceKind.LLM, model="gpt-4o"):
-                usage = etrace.set_usage(input_tokens=1000, output_tokens=500, model="gpt-4o-mini")
+                etrace.set_usage(input_tokens=1000, output_tokens=500, model="gpt-4o-mini")
             # gpt-4o-mini has different pricing than gpt-4o
             span = exporter.get_finished_spans()[0]
             assert span.model == "gpt-4o-mini"

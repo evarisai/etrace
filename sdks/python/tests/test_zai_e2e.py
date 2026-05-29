@@ -18,7 +18,6 @@ Marked as @pytest.mark.e2e — skipped unless --run-e2e flag is passed.
 from __future__ import annotations
 
 import os
-import contextlib
 
 import openai
 import pytest

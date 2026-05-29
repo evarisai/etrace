@@ -10,8 +10,6 @@ import json
 import logging
 from typing import Any, ClassVar
 
-from etrace import MAX_ATTR_LEN
-
 from .base import BaseInstrumentor
 
 logger = logging.getLogger("etrace.instrumentation")
@@ -94,21 +92,15 @@ class AnthropicInstrumentor(BaseInstrumentor):
         try:
             content = getattr(result, "content", None)
             if content:
-                text = "".join(
-                    block.text for block in content if hasattr(block, "text") and block.text
-                )
+                text = "".join(block.text for block in content if hasattr(block, "text") and block.text)
                 if text:
                     self._capture_output(span, text)
                 else:
                     # When no text, the LLM is requesting tool use.
-                    tool_blocks = [
-                        b for b in content
-                        if getattr(b, "type", None) == "tool_use"
-                    ]
+                    tool_blocks = [b for b in content if getattr(b, "type", None) == "tool_use"]
                     if tool_blocks:
                         tc_data = [
-                            {"name": getattr(b, "name", ""), "input": getattr(b, "input", {})}
-                            for b in tool_blocks
+                            {"name": getattr(b, "name", ""), "input": getattr(b, "input", {})} for b in tool_blocks
                         ]
                         self._capture_output(span, json.dumps(tc_data))
         except Exception:

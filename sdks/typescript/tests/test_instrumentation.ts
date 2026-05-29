@@ -303,6 +303,48 @@ describe("OpenAIInstrumentor", () => {
     inst.uninstrument();
   });
 
+  it("chat span captures tool calls as output", async () => {
+    const exp = setup();
+    const originalCreate = (..._args: unknown[]) =>
+      Promise.resolve({
+        model: "gpt-4o",
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  function: {
+                    name: "weather",
+                    arguments: '{"city":"Paris"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+    const sdk = makeOpenAISdk(originalCreate);
+    const inst = new TestableOpenAIInstrumentor();
+    inst.useMock(sdk);
+    inst.instrument(false);
+
+    const proto = (sdk.default.Chat.Completions as Record<string, unknown>).prototype as Record<
+      string,
+      unknown
+    >;
+    await (proto.create as (...args: unknown[]) => Promise<unknown>)({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "weather" }],
+    });
+
+    const span = exp.getFinishedSpans().find((s) => s.name === "openai.chat")!;
+    expect(span.output).toEqual([{ name: "weather", arguments: '{"city":"Paris"}' }]);
+    expect(span.attributes?.["gen_ai.output"]).toContain("weather");
+
+    inst.uninstrument();
+  });
+
   it("chat span captures input messages", async () => {
     const exp = setup();
     const originalCreate = (..._args: unknown[]) => Promise.resolve(openaiChatResponse());
@@ -623,6 +665,34 @@ describe("AnthropicInstrumentor", () => {
 
     const span = exp.getFinishedSpans().find((s) => s.name === "anthropic.messages")!;
     expect(span.attributes?.["gen_ai.output"]).toBe("Test response from Claude");
+
+    inst.uninstrument();
+  });
+
+  it("messages span captures tool use as output", async () => {
+    const exp = setup();
+    const originalCreate = (..._args: unknown[]) =>
+      Promise.resolve({
+        model: "claude-sonnet-4-20250514",
+        content: [{ type: "tool_use", name: "weather", input: { city: "Paris" } }],
+      });
+    const sdk = makeAnthropicSdk(originalCreate);
+    const inst = new TestableAnthropicInstrumentor();
+    inst.useMock(sdk);
+    inst.instrument(false);
+
+    const proto = (sdk.default.Messages as Record<string, unknown>).prototype as Record<
+      string,
+      unknown
+    >;
+    await (proto.create as (...args: unknown[]) => Promise<unknown>)({
+      model: "claude-sonnet-4-20250514",
+      messages: [{ role: "user", content: "weather" }],
+    });
+
+    const span = exp.getFinishedSpans().find((s) => s.name === "anthropic.messages")!;
+    expect(span.output).toEqual([{ name: "weather", arguments: { city: "Paris" } }]);
+    expect(span.attributes?.["gen_ai.output"]).toContain("weather");
 
     inst.uninstrument();
   });

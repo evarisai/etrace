@@ -15,14 +15,19 @@
  *   }, { kind: "agent" });
  */
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createRequire } from "node:module";
 
 import type { Span, TraceKind, TraceLevel, Usage, ContextOptions, ScoreOptions } from "./types.js";
 import { InMemoryExporter } from "./exporter.js";
 import type { SpanExporter } from "./exporter.js";
+import type { MaybePromise } from "./exporter.js";
 import { SimpleProcessor, MultiProcessor } from "./processor.js";
 import type { SpanProcessor } from "./processor.js";
 import { instrumentAll, uninstrumentAll } from "./instrumentation/index.js";
 import { calculateCost } from "./pricing.js";
+import { EtraceLangChainHandler, langchainHandler } from "./langchain.js";
+
+const _require = createRequire(import.meta.url);
 
 // ── Public re-exports ────────────────────────────────────────────────────────
 
@@ -30,6 +35,9 @@ export { SpanExportResult, InMemoryExporter, ConsoleExporter } from "./exporter.
 export type { SpanExporter } from "./exporter.js";
 export { SimpleProcessor, BatchProcessor, MultiProcessor } from "./processor.js";
 export type { SpanProcessor } from "./processor.js";
+export { RunTracker } from "./tracing.js";
+export { EtraceLangChainHandler, langchainHandler };
+export type { UsageMap } from "./tracing.js";
 
 // ── Global state ─────────────────────────────────────────────────────────────
 
@@ -84,7 +92,7 @@ export interface InitConfig {
   exporters?: SpanExporter[];
   processors?: SpanProcessor[];
   calculateCosts?: boolean;
-  autoInstrument?: { llm?: boolean };
+  autoInstrument?: { llm?: boolean; langchain?: boolean };
   debug?: boolean;
   version?: string;
   release?: string;
@@ -107,8 +115,24 @@ export function init(config: InitConfig = {}): void {
     _processor = new SimpleProcessor(mem);
   }
 
+  const autoInstrument = config.autoInstrument ?? { llm: true, langchain: true };
+
+  // Auto-detect LangChain. The callback handler captures LangChain LLM spans
+  // with framework hierarchy, so provider monkey-patching is redundant there.
+  if (autoInstrument.langchain !== false && _hasModule("@langchain/core")) {
+    if (autoInstrument.llm !== false) {
+      if (config.debug) {
+        console.info(
+          "[etrace] LangChain detected; disabling LLM auto-instrumentation " +
+            "(use etrace.langchainHandler() instead)",
+        );
+      }
+      autoInstrument.llm = false;
+    }
+  }
+
   // Auto-instrument LLM providers
-  if (config.autoInstrument?.llm !== false) {
+  if (autoInstrument.llm !== false) {
     try {
       instrumentAll(_calcCosts);
     } catch (exc) {
@@ -360,7 +384,7 @@ export function score(options: ScoreOptions): Record<string, unknown> {
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
-export function flush(timeoutMs = 30_000): boolean {
+export function flush(timeoutMs = 30_000): MaybePromise<boolean> {
   if (_processor) {
     try {
       return _processor.forceFlush(timeoutMs);
@@ -371,28 +395,44 @@ export function flush(timeoutMs = 30_000): boolean {
   return true;
 }
 
-export function shutdown(): void {
+export async function shutdown(): Promise<void> {
+  const processor = _processor;
+  _processor = null;
+  _initialized = false;
+
   try {
     uninstrumentAll();
   } catch {
     /* best-effort */
   }
   try {
-    _processor?.shutdown();
+    await processor?.shutdown();
   } catch {
     /* best-effort */
   }
-  _processor = null;
-  _initialized = false;
 }
 
 export function isInitialized(): boolean {
   return _initialized;
 }
 
+// ── Internal hooks for framework adapters ───────────────────────────────────
+
+export function _getProcessor(): SpanProcessor | null {
+  return _processor;
+}
+
+export function _getCalcCosts(): boolean {
+  return _calcCosts;
+}
+
+export function _setCurrentSpan(span: Span | null): void {
+  _spanStore.enterWith(span);
+}
+
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
-function _createSpan(
+export function _createSpan(
   name: string,
   kind: TraceKind,
   config: TraceConfig | undefined,
@@ -452,4 +492,13 @@ function _isPromise(v: unknown): v is Promise<unknown> {
   return (
     v !== null && typeof v === "object" && typeof (v as { then?: unknown }).then === "function"
   );
+}
+
+function _hasModule(name: string): boolean {
+  try {
+    _require.resolve(name);
+    return true;
+  } catch {
+    return false;
+  }
 }

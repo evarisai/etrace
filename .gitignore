@@ -13,6 +13,11 @@ build/
 
 # TypeScript
 node_modules/
+etrace-studio/.output/
+etrace-studio/.nitro/
+etrace-studio/.tanstack/
+etrace-studio/.vinxi/
+etrace-studio/node_modules/
 *.js.map
 .tsc/
 
@@ -25,9 +30,6 @@ node_modules/
 
 # Generated / scratch
 architecture-diagram.html
-
-# Etrace Studio (separate product, developed separately)
-etrace-studio/
 
 # Reference repos (cloned for research, not part of the project)
 /tmp/

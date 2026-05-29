@@ -5,15 +5,17 @@
  */
 import type { Span } from "./types.js";
 
+export type MaybePromise<T> = T | Promise<T>;
+
 export enum SpanExportResult {
   SUCCESS = 0,
   FAILED = 1,
 }
 
 export interface SpanExporter {
-  export(spans: Span[]): SpanExportResult | Promise<SpanExportResult>;
-  shutdown(): void;
-  forceFlush?(timeoutMs?: number): boolean;
+  export(spans: Span[]): MaybePromise<SpanExportResult>;
+  shutdown(): MaybePromise<void>;
+  forceFlush?(timeoutMs?: number): MaybePromise<boolean>;
 }
 
 /** Collects exported spans in memory. Ideal for testing. */

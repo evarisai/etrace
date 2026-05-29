@@ -154,9 +154,11 @@ class TestSpanStatus:
 
 class TestSpanHierarchy:
     def test_nested_traces_share_trace_id(self, client, exporter):
-        with etrace.trace("parent", kind=TraceKind.WORKFLOW) as p:
-            with etrace.trace("child", kind=TraceKind.TOOL) as c:
-                assert c.trace_id == p.trace_id
+        with (
+            etrace.trace("parent", kind=TraceKind.WORKFLOW) as p,
+            etrace.trace("child", kind=TraceKind.TOOL) as c,
+        ):
+            assert c.trace_id == p.trace_id
         spans = exporter.get_finished_spans()
         assert spans[0].trace_id == spans[1].trace_id
 
@@ -174,10 +176,12 @@ class TestSpanHierarchy:
         assert spans[0].trace_id != spans[1].trace_id
 
     def test_deeply_nested_hierarchy(self, client, exporter):
-        with etrace.trace("workflow", kind=TraceKind.WORKFLOW) as wf:
-            with etrace.trace("agent", kind=TraceKind.AGENT):
-                with etrace.trace("tool", kind=TraceKind.TOOL):
-                    pass
+        with (
+            etrace.trace("workflow", kind=TraceKind.WORKFLOW),
+            etrace.trace("agent", kind=TraceKind.AGENT),
+            etrace.trace("tool", kind=TraceKind.TOOL),
+        ):
+            pass
         spans = exporter.get_finished_spans()
         assert len(spans) == 3
         # All share trace_id

@@ -1,0 +1,29 @@
+{
+  "name": "etrace-mastra-weather-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "ask": "tsx src/run.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/loggers": "latest",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "dotenv": "^17.2.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "mastra": "latest",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

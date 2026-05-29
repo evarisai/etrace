@@ -1,0 +1,15 @@
+{
+  "short_name": "etrace",
+  "name": "etrace studio",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#f7f7f4",
+  "background_color": "#f7f7f4"
+}

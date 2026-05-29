@@ -18,7 +18,6 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from .. import MAX_ATTR_LEN
-from .._pricing import calculate_cost
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -73,7 +72,7 @@ class BaseInstrumentor:
         """Create a wrapper factory that uses etrace.trace() internally."""
         inst = self
 
-        def _trace_and_process(span, model, result, kwargs):
+        def _trace_and_process(span: Any, model: str, result: Any, kwargs: dict[str, Any]) -> None:
             """Post-result processing shared by sync and async wrappers."""
             if not span:
                 return
@@ -86,7 +85,8 @@ class BaseInstrumentor:
 
                 @functools.wraps(original)
                 async def wrapper(*args: Any, **kwargs: Any) -> Any:
-                    from .. import trace as etrace_trace, get_current_span
+                    from .. import get_current_span
+                    from .. import trace as etrace_trace
                     from .._types import TraceKind
 
                     trace_kind = TraceKind(kind) if kind in ("llm", "embedding") else TraceKind.LLM
@@ -113,7 +113,8 @@ class BaseInstrumentor:
 
                 @functools.wraps(original)
                 def wrapper(*args: Any, **kwargs: Any) -> Any:
-                    from .. import trace as etrace_trace, get_current_span
+                    from .. import get_current_span
+                    from .. import trace as etrace_trace
                     from .._types import TraceKind
 
                     trace_kind = TraceKind(kind) if kind in ("llm", "embedding") else TraceKind.LLM
@@ -153,9 +154,7 @@ class BaseInstrumentor:
         messages = kwargs.get("messages")
         if messages:
             with contextlib.suppress(Exception):
-                span.attributes["gen_ai.input.messages"] = json.dumps(messages, default=str)[
-                    :MAX_ATTR_LEN
-                ]
+                span.attributes["gen_ai.input.messages"] = json.dumps(messages, default=str)[:MAX_ATTR_LEN]
 
     def _capture_output(self, span: Any, text: str) -> None:
         """Capture output text on the span."""

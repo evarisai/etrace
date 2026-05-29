@@ -10,8 +10,6 @@ import json
 import logging
 from typing import Any, ClassVar
 
-from etrace import MAX_ATTR_LEN
-
 from .base import BaseInstrumentor
 
 logger = logging.getLogger("etrace.instrumentation")
@@ -96,10 +94,7 @@ class OpenAIInstrumentor(BaseInstrumentor):
         # LangChain (and other frameworks) may use
         # client.chat.completions.with_raw_response.create(...) which
         # returns a LegacyAPIResponse wrapping the real ChatCompletion.
-        if type(result).__name__ == "LegacyAPIResponse":
-            parsed = result.parse()
-        else:
-            parsed = result
+        parsed = result.parse() if type(result).__name__ == "LegacyAPIResponse" else result
 
         model = self._resolve_model(parsed, str(kwargs.get("model", "")))
 
@@ -151,10 +146,16 @@ class OpenAIInstrumentor(BaseInstrumentor):
                         if tool_calls:
                             tc_data = []
                             for tc in tool_calls:
-                                tc_data.append({
-                                    "name": getattr(tc.function, "name", "") if hasattr(tc, "function") else getattr(tc, "name", ""),
-                                    "arguments": getattr(tc.function, "arguments", "") if hasattr(tc, "function") else getattr(tc, "arguments", ""),
-                                })
+                                tc_data.append(
+                                    {
+                                        "name": getattr(tc.function, "name", "")
+                                        if hasattr(tc, "function")
+                                        else getattr(tc, "name", ""),
+                                        "arguments": getattr(tc.function, "arguments", "")
+                                        if hasattr(tc, "function")
+                                        else getattr(tc, "arguments", ""),
+                                    }
+                                )
                             self._capture_output(span, json.dumps(tc_data))
         except Exception:
             pass

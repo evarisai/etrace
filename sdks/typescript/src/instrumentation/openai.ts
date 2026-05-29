@@ -109,6 +109,17 @@ export class OpenAIInstrumentor extends BaseInstrumentor {
         const msg = choices[0].message as Record<string, unknown> | null;
         if (msg?.content) {
           this.captureOutput(span, String(msg.content));
+        } else if (Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0) {
+          const toolCalls = msg.tool_calls.map((toolCall) => {
+            const tc = toolCall as Record<string, unknown>;
+            const fn = (tc.function ?? {}) as Record<string, unknown>;
+            return {
+              name: fn.name ?? tc.name ?? "",
+              arguments: fn.arguments ?? tc.arguments ?? {},
+            };
+          });
+          span.output = toolCalls;
+          this.captureOutput(span, JSON.stringify(toolCalls));
         }
       }
     } catch {

@@ -150,9 +150,11 @@ class TestTrace:
         assert exporter.get_finished_spans()[0].output == {"result": 42}
 
     def test_nested_traces_share_trace_id(self, client, exporter):
-        with etrace.trace("parent", kind=TraceKind.WORKFLOW) as p:
-            with etrace.trace("child", kind=TraceKind.TOOL) as c:
-                assert c.trace_id == p.trace_id
+        with (
+            etrace.trace("parent", kind=TraceKind.WORKFLOW) as p,
+            etrace.trace("child", kind=TraceKind.TOOL) as c,
+        ):
+            assert c.trace_id == p.trace_id
         spans = exporter.get_finished_spans()
         assert len(spans) == 2
         assert spans[0].trace_id == spans[1].trace_id

@@ -152,7 +152,7 @@ def init(
         # the monkey-patching auto-instrumentor is redundant.
         if auto_instrument.get("langchain", True):
             try:
-                import langchain_core  # noqa: F401
+                import langchain_core  # type: ignore[import-not-found] # noqa: F401
 
                 if auto_instrument.get("llm", True):
                     logger.info(
@@ -237,7 +237,18 @@ def trace(
     proc = _processor if _initialized else None
 
     span, token, start = _start_span(
-        name, resolved_kind, input, model, provider, tags, level, version, release, model_parameters, prompt_id, attributes,
+        name,
+        resolved_kind,
+        input,
+        model,
+        provider,
+        tags,
+        level,
+        version,
+        release,
+        model_parameters,
+        prompt_id,
+        attributes,
     )
     try:
         yield span
@@ -249,6 +260,7 @@ def trace(
         raise
     finally:
         _finish_span(span, token, start, processor=proc)
+
 
 def _start_span(
     name: str,

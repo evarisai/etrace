@@ -7,12 +7,13 @@
 import type { Span } from "./types.js";
 import { SpanExportResult } from "./exporter.js";
 import type { SpanExporter } from "./exporter.js";
+import type { MaybePromise } from "./exporter.js";
 
 export interface SpanProcessor {
   onStart(span: Span): void;
   onEnd(span: Span): void;
-  forceFlush(timeoutMs?: number): boolean;
-  shutdown(): void;
+  forceFlush(timeoutMs?: number): MaybePromise<boolean>;
+  shutdown(): MaybePromise<void>;
 }
 
 /** Sends every finished span directly to the exporter. */
@@ -29,12 +30,12 @@ export class SimpleProcessor implements SpanProcessor {
     this._exporter.export([span]);
   }
 
-  forceFlush(_timeoutMs?: number): boolean {
-    return true;
+  forceFlush(timeoutMs?: number): MaybePromise<boolean> {
+    return this._exporter.forceFlush?.(timeoutMs) ?? true;
   }
 
-  shutdown(): void {
-    this._exporter.shutdown();
+  shutdown(): MaybePromise<void> {
+    return this._exporter.shutdown();
   }
 }
 
@@ -69,18 +70,28 @@ export class BatchProcessor implements SpanProcessor {
     return this._exporter.export(batch);
   }
 
-  forceFlush(_timeoutMs?: number): boolean {
+  forceFlush(timeoutMs?: number): MaybePromise<boolean> {
     const result = this._flush();
-    return result === SpanExportResult.SUCCESS;
+    if (result instanceof Promise) {
+      return result.then(async (exportResult) => {
+        if (exportResult !== SpanExportResult.SUCCESS) return false;
+        return (await this._exporter.forceFlush?.(timeoutMs)) ?? true;
+      });
+    }
+    if (result !== SpanExportResult.SUCCESS) return false;
+    return this._exporter.forceFlush?.(timeoutMs) ?? true;
   }
 
-  shutdown(): void {
+  shutdown(): MaybePromise<void> {
     if (this._timer) {
       clearInterval(this._timer);
       this._timer = null;
     }
-    this._flush();
-    this._exporter.shutdown();
+    const result = this._flush();
+    if (result instanceof Promise) {
+      return result.then(() => this._exporter.shutdown());
+    }
+    return this._exporter.shutdown();
   }
 }
 
@@ -100,11 +111,18 @@ export class MultiProcessor implements SpanProcessor {
     for (const p of this._processors) p.onEnd(span);
   }
 
-  forceFlush(timeoutMs?: number): boolean {
-    return this._processors.every((p) => p.forceFlush(timeoutMs));
+  forceFlush(timeoutMs?: number): MaybePromise<boolean> {
+    const results = this._processors.map((p) => p.forceFlush(timeoutMs));
+    if (results.some((result) => result instanceof Promise)) {
+      return Promise.all(results).then((resolved) => resolved.every(Boolean));
+    }
+    return (results as boolean[]).every(Boolean);
   }
 
-  shutdown(): void {
-    for (const p of this._processors) p.shutdown();
+  shutdown(): MaybePromise<void> {
+    const results = this._processors.map((p) => p.shutdown());
+    if (results.some((result) => result instanceof Promise)) {
+      return Promise.all(results).then(() => undefined);
+    }
   }
 }

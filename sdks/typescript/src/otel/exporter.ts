@@ -1,8 +1,9 @@
 /**
  * OtelExporter — bridges etrace Span → OTel ReadableSpan → standard OTel SpanExporter.
  *
- * Optional dependency: requires @opentelemetry/sdk-trace-base.
- * Install with: npm install etrace @opentelemetry/sdk-trace-base
+ * By default this sends OTLP/protobuf over HTTP, matching the Python SDK.
+ * Advanced users can pass any OpenTelemetry SpanExporter, including the
+ * OTLP/JSON HTTP exporter.
  */
 import { createRequire } from "node:module";
 import type { Span, Usage } from "../types.js";
@@ -12,8 +13,37 @@ import { SpanExportResult } from "../exporter.js";
 
 const _require = createRequire(import.meta.url);
 
+interface OTelExportResult {
+  code: number;
+  error?: Error;
+}
+
+interface OTelSpanExporterLike {
+  export(spans: unknown[], cb: (result: OTelExportResult) => void): unknown;
+  shutdown(): void | Promise<void>;
+  forceFlush?(): void | Promise<void>;
+}
+
+export interface OtelExporterOptions {
+  /**
+   * Custom OpenTelemetry SpanExporter. Use this for advanced transports or
+   * non-default encodings, such as @opentelemetry/exporter-trace-otlp-http
+   * when you explicitly want OTLP/JSON.
+   */
+  exporter?: OTelSpanExporterLike;
+}
+
 function _truncate(s: string): string {
   return s.length > MAX_ATTR_LEN ? s.slice(0, MAX_ATTR_LEN) : s;
+}
+
+function stringifyPayload(value: unknown): string {
+  if (typeof value === "string") return _truncate(value);
+  try {
+    return _truncate(JSON.stringify(value, null, 2) ?? String(value));
+  } catch {
+    return _truncate(String(value));
+  }
 }
 
 function hexToInt(hex: string, expectedLen: number): string {
@@ -61,8 +91,8 @@ function spanToAttributes(span: Span): Record<string, unknown> {
     if (u.totalCost) attrs["gen_ai.usage.cost"] = u.totalCost;
   }
 
-  if (span.input != null) attrs["etrace.input"] = _truncate(String(span.input));
-  if (span.output != null) attrs["etrace.output"] = _truncate(String(span.output));
+  if (span.input != null) attrs["etrace.input"] = stringifyPayload(span.input);
+  if (span.output != null) attrs["etrace.output"] = stringifyPayload(span.output);
   if (span.tags?.length) attrs["etrace.tags"] = span.tags.join(",");
   if (span.userId) attrs["etrace.user_id"] = span.userId;
   if (span.sessionId) attrs["etrace.session_id"] = span.sessionId;
@@ -110,6 +140,14 @@ function etraceToOtelSpan(span: Span): unknown {
     name: span.name,
     kind: SpanKind.INTERNAL,
     parentSpanId: span.parentSpanId,
+    parentSpanContext: span.parentSpanId
+      ? {
+          traceId: hexToInt(span.traceId, 32),
+          spanId: hexToInt(span.parentSpanId, 16),
+          traceFlags: TraceFlags.SAMPLED,
+          isRemote: false,
+        }
+      : undefined,
     ended: span.endedAt != null,
     startTime,
     endTime,
@@ -135,26 +173,33 @@ function etraceToOtelSpan(span: Span): unknown {
 // ── OtelExporter ─────────────────────────────────────────────────────────────
 
 export class OtelExporter implements SpanExporter {
-  private readonly _exporter: unknown;
+  private readonly _exporter: OTelSpanExporterLike;
+  private readonly _pending = new Set<Promise<SpanExportResult>>();
 
-  constructor(otelExporter?: unknown) {
-    if (otelExporter) {
-      this._exporter = otelExporter;
+  constructor(optionsOrExporter?: OtelExporterOptions | OTelSpanExporterLike) {
+    const customExporter =
+      optionsOrExporter && "export" in optionsOrExporter
+        ? optionsOrExporter
+        : optionsOrExporter?.exporter;
+
+    if (customExporter) {
+      this._exporter = customExporter;
     } else {
       this._exporter = this._createDefaultOtlpExporter();
     }
   }
 
-  private _createDefaultOtlpExporter(): unknown {
+  private _createDefaultOtlpExporter(): OTelSpanExporterLike {
     try {
-      const { OTLPTraceExporter } = _require("@opentelemetry/exporter-trace-otlp-http") as {
-        OTLPTraceExporter: new () => unknown;
+      const { OTLPTraceExporter } = _require("@opentelemetry/exporter-trace-otlp-proto") as {
+        OTLPTraceExporter: new () => OTelSpanExporterLike;
       };
       return new OTLPTraceExporter();
     } catch {
       throw new Error(
-        "No OTel exporter provided and @opentelemetry/exporter-trace-otlp-http not installed. " +
-          "Install it or pass an OTel SpanExporter to OtelExporter().",
+        "No OTel exporter provided and @opentelemetry/exporter-trace-otlp-proto not installed. " +
+          "Install it for the default OTLP/protobuf exporter, or pass a custom OTel SpanExporter " +
+          "to OtelExporter({ exporter }).",
       );
     }
   }
@@ -162,14 +207,31 @@ export class OtelExporter implements SpanExporter {
   export(spans: Span[]): SpanExportResult {
     try {
       const otelSpans = spans.map(etraceToOtelSpan);
-      const exp = this._exporter as { export(spans: unknown[], cb: (r: unknown) => void): unknown };
-      const result = exp.export(otelSpans, () => {});
-      // OTel SDK may return { code: number } or invoke callback
-      if (typeof result === "object" && result !== null && "code" in result) {
-        return (result as { code: number }).code === 0
-          ? SpanExportResult.SUCCESS
-          : SpanExportResult.FAILED;
-      }
+      let settled = false;
+      const pending = new Promise<SpanExportResult>((resolve) => {
+        const result = this._exporter.export(otelSpans, (r) => {
+          settled = true;
+          resolve(this._exportResult(r));
+        });
+        if (typeof result === "object" && result !== null && "code" in result) {
+          settled = true;
+          resolve(this._exportResult(result));
+        }
+      });
+      this._pending.add(pending);
+      pending
+        .then((result) => {
+          if (result !== SpanExportResult.SUCCESS) {
+            console.warn("[etrace] OtelExporter export failed");
+          }
+        })
+        .catch((e: unknown) => {
+          console.warn(`[etrace] OtelExporter export failed: ${e}`);
+        })
+        .finally(() => {
+          this._pending.delete(pending);
+        });
+      if (!settled) return SpanExportResult.SUCCESS;
       return SpanExportResult.SUCCESS;
     } catch (exc) {
       console.warn(`[etrace] OtelExporter export failed: ${exc}`);
@@ -177,21 +239,29 @@ export class OtelExporter implements SpanExporter {
     }
   }
 
-  shutdown(): void {
-    (this._exporter as { shutdown(): void }).shutdown();
+  async shutdown(): Promise<void> {
+    await this.forceFlush();
+    await this._exporter.shutdown();
   }
 
-  forceFlush(_timeoutMs?: number): boolean {
-    const exp = this._exporter as { forceFlush?(...args: unknown[]): unknown };
-    if (typeof exp.forceFlush === "function") {
-      const result = exp.forceFlush();
+  async forceFlush(_timeoutMs?: number): Promise<boolean> {
+    await Promise.all([...this._pending]);
+    if (typeof this._exporter.forceFlush === "function") {
+      const result = this._exporter.forceFlush();
       if (result instanceof Promise) {
-        result.catch((e: unknown) => {
-          console.warn(`[etrace] OtelExporter forceFlush failed: ${e}`);
-        });
+        await result;
       }
       return true;
     }
     return true;
+  }
+
+  private _exportResult(result: unknown): SpanExportResult {
+    if (typeof result === "object" && result !== null && "code" in result) {
+      return (result as { code: number }).code === 0
+        ? SpanExportResult.SUCCESS
+        : SpanExportResult.FAILED;
+    }
+    return SpanExportResult.SUCCESS;
   }
 }

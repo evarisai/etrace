@@ -46,6 +46,7 @@ class RunTracker:
 
         # Inherit from an active etrace.trace() context if one exists
         from . import get_current_span
+
         active = get_current_span()
         if active:
             self._root_trace_id = active.trace_id
@@ -111,6 +112,7 @@ class RunTracker:
         # Set _current_span so that nested etrace.trace() / @etrace.tool
         # calls inside this run become children of this span.
         from . import _current_span
+
         cv_token = _current_span.set(span)
 
         self._spans[rid] = _Run(span=span, start=time.monotonic(), parent_run_id=parent_run_id, _cv_token=cv_token)
@@ -160,6 +162,7 @@ class RunTracker:
         # Restore previous _current_span so we don't leak context
         if run._cv_token is not None:
             from . import _current_span
+
             _current_span.reset(run._cv_token)
 
         if _processor:
@@ -222,7 +225,7 @@ class RunTracker:
         if reasoning:
             span.attributes["gen_ai.usage.reasoning_tokens"] = reasoning
 
-        model = span.model or usage.get("model", "")
+        model = str(span.model or usage.get("model", ""))
         if model and (prompt or completion):
             from . import set_usage
 
@@ -239,9 +242,11 @@ class RunTracker:
 class _Run:
     """An in-flight run tied to a single etrace span."""
 
-    __slots__ = ("span", "start", "parent_run_id", "_cv_token")
+    __slots__ = ("_cv_token", "parent_run_id", "span", "start")
 
-    def __init__(self, span: Span | None, start: float, parent_run_id: str | None = None, _cv_token: Any = None) -> None:
+    def __init__(
+        self, span: Span | None, start: float, parent_run_id: str | None = None, _cv_token: Any = None
+    ) -> None:
         self.span = span
         self.start = start
         self.parent_run_id = parent_run_id

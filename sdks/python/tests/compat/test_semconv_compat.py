@@ -152,10 +152,12 @@ class TestGenAIUsageAttributes:
 
 class TestSpanHierarchyCompliance:
     def test_nested_spans_share_trace_context(self, evaris_client, span_exporter):
-        with etrace.trace("workflow", kind=TraceKind.WORKFLOW) as wf:
-            with etrace.trace("task", kind=TraceKind.TOOL) as task:
-                with etrace.trace("openai.chat", kind=TraceKind.LLM, provider="openai"):
-                    pass
+        with (
+            etrace.trace("workflow", kind=TraceKind.WORKFLOW),
+            etrace.trace("task", kind=TraceKind.TOOL),
+            etrace.trace("openai.chat", kind=TraceKind.LLM, provider="openai"),
+        ):
+            pass
         spans = span_exporter.get_finished_spans()
         assert len(spans) == 3
         # All share trace_id

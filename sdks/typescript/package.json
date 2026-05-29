@@ -30,6 +30,10 @@
       "types": "./src/otel/index.ts",
       "import": "./src/otel/index.ts"
     },
+    "./langchain": {
+      "types": "./src/langchain.ts",
+      "import": "./src/langchain.ts"
+    },
     "./evaris": {
       "types": "./src/evaris/index.ts",
       "import": "./src/evaris/index.ts"
@@ -53,10 +57,16 @@
     "agents"
   ],
   "license": "MIT",
+  "optionalDependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.208.0",
+    "@opentelemetry/resources": "^2.7.1"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/core": "^2.7.1",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.208.0",
     "@opentelemetry/resources": "^2.7.1",
     "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@opentelemetry/semantic-conventions": "^1.41.1",
