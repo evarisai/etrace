@@ -64,9 +64,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm install --frozen-lockfile
       - run: pnpm exec prettier --check "**/*.{ts,tsx,js,jsx}"
-      - run: pnpm lint
+      - run: pnpm exec eslint src/
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build

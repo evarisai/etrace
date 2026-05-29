@@ -8,78 +8,78 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from "./routes/__root"
-import { Route as TracesRouteImport } from "./routes/traces"
-import { Route as IndexRouteImport } from "./routes/index"
-import { Route as V1TracesRouteImport } from "./routes/v1/traces"
-import { Route as ApiTracesRouteImport } from "./routes/api/traces"
-import { Route as ApiTracesTraceIdRouteImport } from "./routes/api/traces/$traceId"
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as TracesRouteImport } from './routes/traces'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as V1TracesRouteImport } from './routes/v1/traces'
+import { Route as ApiTracesRouteImport } from './routes/api/traces'
+import { Route as ApiTracesTraceIdRouteImport } from './routes/api/traces/$traceId'
 
 const TracesRoute = TracesRouteImport.update({
-  id: "/traces",
-  path: "/traces",
+  id: '/traces',
+  path: '/traces',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
-  id: "/",
-  path: "/",
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const V1TracesRoute = V1TracesRouteImport.update({
-  id: "/v1/traces",
-  path: "/v1/traces",
+  id: '/v1/traces',
+  path: '/v1/traces',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTracesRoute = ApiTracesRouteImport.update({
-  id: "/api/traces",
-  path: "/api/traces",
+  id: '/api/traces',
+  path: '/api/traces',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTracesTraceIdRoute = ApiTracesTraceIdRouteImport.update({
-  id: "/$traceId",
-  path: "/$traceId",
+  id: '/$traceId',
+  path: '/$traceId',
   getParentRoute: () => ApiTracesRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  "/": typeof IndexRoute
-  "/traces": typeof TracesRoute
-  "/api/traces": typeof ApiTracesRouteWithChildren
-  "/v1/traces": typeof V1TracesRoute
-  "/api/traces/$traceId": typeof ApiTracesTraceIdRoute
+  '/': typeof IndexRoute
+  '/traces': typeof TracesRoute
+  '/api/traces': typeof ApiTracesRouteWithChildren
+  '/v1/traces': typeof V1TracesRoute
+  '/api/traces/$traceId': typeof ApiTracesTraceIdRoute
 }
 export interface FileRoutesByTo {
-  "/": typeof IndexRoute
-  "/traces": typeof TracesRoute
-  "/api/traces": typeof ApiTracesRouteWithChildren
-  "/v1/traces": typeof V1TracesRoute
-  "/api/traces/$traceId": typeof ApiTracesTraceIdRoute
+  '/': typeof IndexRoute
+  '/traces': typeof TracesRoute
+  '/api/traces': typeof ApiTracesRouteWithChildren
+  '/v1/traces': typeof V1TracesRoute
+  '/api/traces/$traceId': typeof ApiTracesTraceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  "/": typeof IndexRoute
-  "/traces": typeof TracesRoute
-  "/api/traces": typeof ApiTracesRouteWithChildren
-  "/v1/traces": typeof V1TracesRoute
-  "/api/traces/$traceId": typeof ApiTracesTraceIdRoute
+  '/': typeof IndexRoute
+  '/traces': typeof TracesRoute
+  '/api/traces': typeof ApiTracesRouteWithChildren
+  '/v1/traces': typeof V1TracesRoute
+  '/api/traces/$traceId': typeof ApiTracesTraceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | "/"
-    | "/traces"
-    | "/api/traces"
-    | "/v1/traces"
-    | "/api/traces/$traceId"
+    | '/'
+    | '/traces'
+    | '/api/traces'
+    | '/v1/traces'
+    | '/api/traces/$traceId'
   fileRoutesByTo: FileRoutesByTo
-  to: "/" | "/traces" | "/api/traces" | "/v1/traces" | "/api/traces/$traceId"
+  to: '/' | '/traces' | '/api/traces' | '/v1/traces' | '/api/traces/$traceId'
   id:
-    | "__root__"
-    | "/"
-    | "/traces"
-    | "/api/traces"
-    | "/v1/traces"
-    | "/api/traces/$traceId"
+    | '__root__'
+    | '/'
+    | '/traces'
+    | '/api/traces'
+    | '/v1/traces'
+    | '/api/traces/$traceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -89,40 +89,40 @@ export interface RootRouteChildren {
   V1TracesRoute: typeof V1TracesRoute
 }
 
-declare module "@tanstack/react-router" {
+declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    "/traces": {
-      id: "/traces"
-      path: "/traces"
-      fullPath: "/traces"
+    '/traces': {
+      id: '/traces'
+      path: '/traces'
+      fullPath: '/traces'
       preLoaderRoute: typeof TracesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/": {
-      id: "/"
-      path: "/"
-      fullPath: "/"
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/v1/traces": {
-      id: "/v1/traces"
-      path: "/v1/traces"
-      fullPath: "/v1/traces"
+    '/v1/traces': {
+      id: '/v1/traces'
+      path: '/v1/traces'
+      fullPath: '/v1/traces'
       preLoaderRoute: typeof V1TracesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/api/traces": {
-      id: "/api/traces"
-      path: "/api/traces"
-      fullPath: "/api/traces"
+    '/api/traces': {
+      id: '/api/traces'
+      path: '/api/traces'
+      fullPath: '/api/traces'
       preLoaderRoute: typeof ApiTracesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/api/traces/$traceId": {
-      id: "/api/traces/$traceId"
-      path: "/$traceId"
-      fullPath: "/api/traces/$traceId"
+    '/api/traces/$traceId': {
+      id: '/api/traces/$traceId'
+      path: '/$traceId'
+      fullPath: '/api/traces/$traceId'
       preLoaderRoute: typeof ApiTracesTraceIdRouteImport
       parentRoute: typeof ApiTracesRoute
     }
@@ -138,7 +138,7 @@ const ApiTracesRouteChildren: ApiTracesRouteChildren = {
 }
 
 const ApiTracesRouteWithChildren = ApiTracesRoute._addFileChildren(
-  ApiTracesRouteChildren
+  ApiTracesRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
@@ -151,9 +151,9 @@ export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
-import type { getRouter } from "./router.tsx"
-import type { createStart } from "@tanstack/react-start"
-declare module "@tanstack/react-start" {
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
