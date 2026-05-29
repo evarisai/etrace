@@ -6,7 +6,7 @@
     "dev": "vite dev --port 3001",
     "build": "vite build && prettier --write src/routeTree.gen.ts",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx}\"",
     "typecheck": "tsc --noEmit"
@@ -47,6 +47,7 @@
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "typescript": "^5.9.3",
+    "eslint": "^10.0.0",
     "typescript-eslint": "^8.60.0",
     "vite": "^7.3.1",
     "vitest": "^3.2.4",

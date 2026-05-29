@@ -66,10 +66,10 @@ jobs:
           node-version: "22"
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prettier --check "**/*.{ts,tsx,js,jsx}"
-      - run: pnpm exec eslint src/
+      - run: pnpm lint
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm build
 
   examples:
     name: Examples
