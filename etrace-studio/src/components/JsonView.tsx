@@ -110,7 +110,7 @@ function JsonNode({
     return (
       <div
         style={{ paddingLeft: indent }}
-        className="mt-0.5 min-w-0 max-w-full [overflow-wrap:anywhere] break-words"
+        className="mt-0.5 max-w-full min-w-0 [overflow-wrap:anywhere] break-words"
       >
         {keyEl}
         <span className={cls}>{val}</span>
@@ -136,7 +136,7 @@ function JsonNode({
     return (
       <div
         style={{ paddingLeft: indent }}
-        className="min-w-0 max-w-full cursor-pointer [overflow-wrap:anywhere] break-words"
+        className="max-w-full min-w-0 cursor-pointer [overflow-wrap:anywhere] break-words"
         onClick={(e) => {
           e.stopPropagation()
           setOpen(true)
@@ -167,7 +167,7 @@ function JsonNode({
     <div>
       <div
         style={{ paddingLeft: indent }}
-        className="min-w-0 max-w-full cursor-pointer [overflow-wrap:anywhere] break-words"
+        className="max-w-full min-w-0 cursor-pointer [overflow-wrap:anywhere] break-words"
         onClick={(e) => {
           e.stopPropagation()
           setOpen(false)

@@ -260,7 +260,7 @@ class TestAsync:
         async def do_work():
             return "done"
 
-        asyncio.get_event_loop().run_until_complete(do_work())
+        asyncio.run(do_work())
         assert len(exporter.get_finished_spans()) == 1
         assert exporter.get_finished_spans()[0].name == "async_tool"
 
@@ -273,7 +273,7 @@ class TestAsync:
         async def parent():
             return await child()
 
-        asyncio.get_event_loop().run_until_complete(parent())
+        asyncio.run(parent())
         spans = exporter.get_finished_spans()
         assert len(spans) == 2
         c = next(s for s in spans if s.name == "child_fn")

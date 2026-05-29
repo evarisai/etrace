@@ -126,7 +126,7 @@ function SpanRow({
 
 function SpanDetailPanel({ span }: { span: Span }) {
   return (
-    <div className="w-full min-w-0 max-w-full space-y-3 overflow-hidden p-3 text-xs">
+    <div className="w-full max-w-full min-w-0 space-y-3 overflow-hidden p-3 text-xs">
       <div className="flex min-w-0 items-center gap-2">
         <span className="min-w-0 truncate font-mono font-semibold">
           {span.name}
@@ -134,7 +134,7 @@ function SpanDetailPanel({ span }: { span: Span }) {
       </div>
 
       {/* Meta grid */}
-      <div className="grid min-w-0 max-w-full grid-cols-[minmax(82px,auto)_minmax(0,1fr)] gap-x-4 gap-y-1 overflow-hidden text-[11px]">
+      <div className="grid max-w-full min-w-0 grid-cols-[minmax(82px,auto)_minmax(0,1fr)] gap-x-4 gap-y-1 overflow-hidden text-[11px]">
         <div className="text-muted-foreground">Span ID</div>
         <div className="truncate font-mono">{span.id}</div>
         {span.parent_span_id && (
@@ -224,10 +224,10 @@ function PayloadSection({
   const summary = summarizePayload(data)
 
   return (
-    <div className="min-w-0 max-w-full overflow-hidden border border-border bg-muted/20">
+    <div className="max-w-full min-w-0 overflow-hidden border border-border bg-muted/20">
       <button
         type="button"
-        className="flex w-full min-w-0 max-w-full items-center gap-2 px-2 py-1.5 text-left"
+        className="flex w-full max-w-full min-w-0 items-center gap-2 px-2 py-1.5 text-left"
         onClick={() => setOpen((value) => !value)}
       >
         <span
@@ -245,7 +245,7 @@ function PayloadSection({
         )}
       </button>
       {open && (
-        <div className="max-h-72 min-w-0 max-w-full contain-inline-size overflow-y-auto overflow-x-hidden border-t border-border bg-background/60 p-2">
+        <div className="max-h-72 max-w-full min-w-0 overflow-x-hidden overflow-y-auto border-t border-border bg-background/60 p-2 contain-inline-size">
           <JsonView data={data} />
         </div>
       )}
@@ -333,7 +333,7 @@ export function SpanTree({
             className="hidden md:block"
           />
           <div
-            className="min-w-0 max-w-[70%] flex-shrink overflow-hidden border-l border-border bg-card md:flex-shrink-0"
+            className="max-w-[70%] min-w-0 flex-shrink overflow-hidden border-l border-border bg-card md:flex-shrink-0"
             style={{ width: `min(${detailWidth}px, 70%)` }}
           >
             <div className="flex h-10 items-center justify-between border-b border-border px-3">

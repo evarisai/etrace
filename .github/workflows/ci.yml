@@ -71,20 +71,23 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-  mastra-example:
-    name: Mastra Example
+  examples:
+    name: Examples
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: examples/mastra-weather-agent
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: pnpm exec tsc --noEmit
+      - name: Mastra Weather Agent
+        working-directory: examples/mastra-weather-agent
+        run: |
+          npm install --ignore-scripts
+          npx tsc --noEmit
+      - name: Deep Research Agent
+        working-directory: examples/deep-research-agent
+        run: |
+          python -c "import ast; ast.parse(open('agent.py').read()); print('syntax OK')"
