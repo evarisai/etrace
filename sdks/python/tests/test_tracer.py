@@ -221,7 +221,7 @@ class TestObserve:
         async def fetch(url):
             return url
 
-        result = asyncio.get_event_loop().run_until_complete(fetch("http://test"))
+        result = asyncio.run(fetch("http://test"))
         assert result == "http://test"
         assert len(exporter.get_finished_spans()) == 1
 

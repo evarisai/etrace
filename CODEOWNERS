@@ -1,0 +1,11 @@
+# CODEOWNERS : these users must approve PRs touching these paths.
+
+# Default: all PRs require review
+* @swaingotnochill
+
+# SDK changes
+sdks/python/ @swaingotnochill
+sdks/typescript/ @swaingotnochill
+
+# Studio
+etrace-studio/ @swaingotnochill
