@@ -126,7 +126,7 @@ function SpanRow({
 
 function SpanDetailPanel({ span }: { span: Span }) {
   return (
-    <div className="min-w-0 space-y-3 p-3 text-xs">
+    <div className="w-full min-w-0 max-w-full space-y-3 overflow-hidden p-3 text-xs">
       <div className="flex min-w-0 items-center gap-2">
         <span className="min-w-0 truncate font-mono font-semibold">
           {span.name}
@@ -134,7 +134,7 @@ function SpanDetailPanel({ span }: { span: Span }) {
       </div>
 
       {/* Meta grid */}
-      <div className="grid min-w-0 grid-cols-[minmax(82px,auto)_minmax(0,1fr)] gap-x-4 gap-y-1 text-[11px]">
+      <div className="grid min-w-0 max-w-full grid-cols-[minmax(82px,auto)_minmax(0,1fr)] gap-x-4 gap-y-1 overflow-hidden text-[11px]">
         <div className="text-muted-foreground">Span ID</div>
         <div className="truncate font-mono">{span.id}</div>
         {span.parent_span_id && (
@@ -144,7 +144,9 @@ function SpanDetailPanel({ span }: { span: Span }) {
           </>
         )}
         <div className="text-muted-foreground">Duration</div>
-        <div className="font-mono">{fmtDuration(span.duration_ms)}</div>
+        <div className="min-w-0 truncate font-mono">
+          {fmtDuration(span.duration_ms)}
+        </div>
         {span.model && (
           <>
             <div className="text-muted-foreground">Model</div>
@@ -160,7 +162,7 @@ function SpanDetailPanel({ span }: { span: Span }) {
         {span.input_tokens !== null && (
           <>
             <div className="text-muted-foreground">Input Tokens</div>
-            <div className="font-mono">
+            <div className="min-w-0 truncate font-mono">
               {span.input_tokens.toLocaleString()}
             </div>
           </>
@@ -168,7 +170,7 @@ function SpanDetailPanel({ span }: { span: Span }) {
         {span.output_tokens !== null && (
           <>
             <div className="text-muted-foreground">Output Tokens</div>
-            <div className="font-mono">
+            <div className="min-w-0 truncate font-mono">
               {span.output_tokens.toLocaleString()}
             </div>
           </>
@@ -176,7 +178,9 @@ function SpanDetailPanel({ span }: { span: Span }) {
         {span.total_cost !== null && (
           <>
             <div className="text-muted-foreground">Cost</div>
-            <div className="font-mono">${span.total_cost.toFixed(4)}</div>
+            <div className="min-w-0 truncate font-mono">
+              ${span.total_cost.toFixed(4)}
+            </div>
           </>
         )}
       </div>
@@ -220,10 +224,10 @@ function PayloadSection({
   const summary = summarizePayload(data)
 
   return (
-    <div className="min-w-0 overflow-hidden border border-border bg-muted/20">
+    <div className="min-w-0 max-w-full overflow-hidden border border-border bg-muted/20">
       <button
         type="button"
-        className="flex w-full min-w-0 items-center gap-2 overflow-hidden px-2 py-1.5 text-left"
+        className="flex w-full min-w-0 max-w-full items-center gap-2 px-2 py-1.5 text-left"
         onClick={() => setOpen((value) => !value)}
       >
         <span
@@ -235,13 +239,13 @@ function PayloadSection({
           {title}
         </span>
         {!open && (
-          <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
+          <span className="min-w-0 flex-1 overflow-hidden font-mono text-[10px] text-muted-foreground">
             {summary}
           </span>
         )}
       </button>
       {open && (
-        <div className="max-h-72 min-w-0 overflow-auto border-t border-border bg-background/60 p-2">
+        <div className="max-h-72 min-w-0 max-w-full contain-inline-size overflow-y-auto overflow-x-hidden border-t border-border bg-background/60 p-2">
           <JsonView data={data} />
         </div>
       )}
@@ -293,7 +297,7 @@ export function SpanTree({
   const selected = selectedId ? spans.find((s) => s.id === selectedId) : null
 
   return (
-    <div className="flex h-full min-w-0">
+    <div className="flex h-full min-w-0 overflow-hidden">
       <ScrollArea className="min-w-0 flex-1">
         <div className="py-1">
           {roots.map((root) => (
@@ -329,8 +333,8 @@ export function SpanTree({
             className="hidden md:block"
           />
           <div
-            className="min-w-0 flex-shrink-0 overflow-hidden border-l border-border bg-card"
-            style={{ width: detailWidth }}
+            className="min-w-0 max-w-[70%] flex-shrink overflow-hidden border-l border-border bg-card md:flex-shrink-0"
+            style={{ width: `min(${detailWidth}px, 70%)` }}
           >
             <div className="flex h-10 items-center justify-between border-b border-border px-3">
               <span className="text-xs font-semibold">Span detail</span>

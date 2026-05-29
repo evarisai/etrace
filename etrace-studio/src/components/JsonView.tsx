@@ -18,21 +18,24 @@ function isObject(v: JsonValue): v is { [key: string]: JsonValue } {
 
 function ExpandableString({ value }: { value: string }) {
   const [expanded, setExpanded] = useState(false)
-  const display = expanded ? value : value.slice(0, 300) + "…"
+  const isLong = value.length > 300
+  const display = expanded || !isLong ? value : value.slice(0, 300) + "…"
   return (
     <>
-      <span className="text-amber-700 dark:text-amber-300">
+      <span className="min-w-0 [overflow-wrap:anywhere] break-words text-amber-700 dark:text-amber-300">
         &quot;{display}&quot;
       </span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          setExpanded(!expanded)
-        }}
-        className="ml-1 text-[10px] text-primary hover:underline"
-      >
-        {expanded ? "less" : "more"}
-      </button>
+      {isLong && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            setExpanded(!expanded)
+          }}
+          className="ml-1 text-[10px] text-primary hover:underline"
+        >
+          {expanded ? "less" : "more"}
+        </button>
+      )}
     </>
   )
 }
@@ -107,7 +110,7 @@ function JsonNode({
     return (
       <div
         style={{ paddingLeft: indent }}
-        className="mt-0.5 min-w-0 [overflow-wrap:anywhere] break-words"
+        className="mt-0.5 min-w-0 max-w-full [overflow-wrap:anywhere] break-words"
       >
         {keyEl}
         <span className={cls}>{val}</span>
@@ -133,7 +136,7 @@ function JsonNode({
     return (
       <div
         style={{ paddingLeft: indent }}
-        className="min-w-0 cursor-pointer [overflow-wrap:anywhere] break-words"
+        className="min-w-0 max-w-full cursor-pointer [overflow-wrap:anywhere] break-words"
         onClick={(e) => {
           e.stopPropagation()
           setOpen(true)
@@ -164,7 +167,7 @@ function JsonNode({
     <div>
       <div
         style={{ paddingLeft: indent }}
-        className="min-w-0 cursor-pointer [overflow-wrap:anywhere] break-words"
+        className="min-w-0 max-w-full cursor-pointer [overflow-wrap:anywhere] break-words"
         onClick={(e) => {
           e.stopPropagation()
           setOpen(false)
@@ -258,7 +261,7 @@ export function JsonView({ data }: { data: unknown; maxExpand?: number }) {
 
   return (
     <pre
-      className="max-w-full [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-muted-foreground"
+      className="max-w-full min-w-0 overflow-hidden [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-muted-foreground"
       style={{ fontFamily: MONO, fontSize: 11, margin: 0 }}
     >
       {String(parsed)}
