@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev --port 3001",
-    "build": "vite build",
+    "build": "vite build && prettier --write src/routeTree.gen.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint",
