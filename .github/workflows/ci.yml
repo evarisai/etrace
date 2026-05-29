@@ -65,11 +65,12 @@ jobs:
         with:
           node-version: "22"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec prettier --check "**/*.{ts,tsx,js,jsx}"
-      - run: pnpm lint
       - run: pnpm build
-      - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm exec prettier --write src/routeTree.gen.ts
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm exec prettier --check "**/*.{ts,tsx,js,jsx}"
 
   examples:
     name: Examples

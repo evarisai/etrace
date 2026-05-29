@@ -138,7 +138,7 @@ const ApiTracesRouteChildren: ApiTracesRouteChildren = {
 }
 
 const ApiTracesRouteWithChildren = ApiTracesRoute._addFileChildren(
-  ApiTracesRouteChildren,
+  ApiTracesRouteChildren
 )
 
 const rootRouteChildren: RootRouteChildren = {
