@@ -34,7 +34,7 @@ def my_step(x: int) -> int:
 ### TypeScript
 
 ```typescript
-import { init, trace, agent, tool, observe } from "etrace";
+import { init, trace, agent, tool, observe } from "@evaris/etrace";
 
 init(); // In-memory (local dev)
 
@@ -58,7 +58,7 @@ Install the OTel extra, set the endpoint, and init with the OTel exporter:
 
 ```python
 # Python
-pip install "etrace[otel]"
+pip install "etrace-py[otel]"
 
 import os
 os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = "http://localhost:3001/v1/traces"
@@ -70,12 +70,12 @@ etrace.init(exporters=[OtelExporter()])
 
 ```typescript
 // TypeScript
-npm install etrace
+npm install @evaris/etrace
 
 process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "http://localhost:3001/v1/traces";
 
-import { init } from "etrace";
-import { OtelExporter } from "etrace/otel";
+import { init } from "@evaris/etrace";
+import { OtelExporter } from "@evaris/etrace/otel";
 init({ exporters: [new OtelExporter()] });
 ```
 
@@ -99,6 +99,7 @@ with etrace.trace("llm-call", kind="llm", model="gpt-4o") as span:
 ```
 
 Update pricing catalog:
+
 ```bash
 python scripts/sync_pricing.py
 ```
@@ -121,36 +122,36 @@ Disable with `etrace.init(auto_instrument={"llm": False})`.
 
 ## Span Kinds (16)
 
-| Kind | Decorator | Description |
-|---|---|---|
-| `workflow` | `@etrace.workflow` | Top-level pipeline |
-| `agent` | `@etrace.agent` | Agent loop |
-| `step` | `@etrace.step` | Discrete step in pipeline |
-| `llm` | `@etrace.llm` | LLM API call (auto-instrumented) |
-| `tool` | `@etrace.tool` | Tool/function call |
-| `http` | `@etrace.http` | Outbound HTTP request |
-| `retrieval` | `@etrace.retrieval` | Vector DB / search |
-| `reranker` | `@etrace.reranker` | Reranking results |
-| `embedding` | `@etrace.embedding` | Embedding generation |
-| `sandbox` | `@etrace.sandbox` | Code execution (Docker/E2B) |
-| `handoff` | `@etrace.handoff` | Agent-to-agent delegation |
-| `approval` | `@etrace.approval` | Human approval/rejection |
-| `guardrail` | `@etrace.guardrail` | Safety/validation check |
-| `eval` | `@etrace.evaluation` | Evaluation run |
-| `scorer` | `@etrace.scorer` | Individual scorer execution |
-| `custom` | `@etrace.observe` | Catch-all |
+| Kind        | Decorator            | Description                      |
+| ----------- | -------------------- | -------------------------------- |
+| `workflow`  | `@etrace.workflow`   | Top-level pipeline               |
+| `agent`     | `@etrace.agent`      | Agent loop                       |
+| `step`      | `@etrace.step`       | Discrete step in pipeline        |
+| `llm`       | `@etrace.llm`        | LLM API call (auto-instrumented) |
+| `tool`      | `@etrace.tool`       | Tool/function call               |
+| `http`      | `@etrace.http`       | Outbound HTTP request            |
+| `retrieval` | `@etrace.retrieval`  | Vector DB / search               |
+| `reranker`  | `@etrace.reranker`   | Reranking results                |
+| `embedding` | `@etrace.embedding`  | Embedding generation             |
+| `sandbox`   | `@etrace.sandbox`    | Code execution (Docker/E2B)      |
+| `handoff`   | `@etrace.handoff`    | Agent-to-agent delegation        |
+| `approval`  | `@etrace.approval`   | Human approval/rejection         |
+| `guardrail` | `@etrace.guardrail`  | Safety/validation check          |
+| `eval`      | `@etrace.evaluation` | Evaluation run                   |
+| `scorer`    | `@etrace.scorer`     | Individual scorer execution      |
+| `custom`    | `@etrace.observe`    | Catch-all                        |
 
 ## Install
 
 ```bash
 # Python (zero-dep core)
-pip install etrace
+pip install etrace-py
 
 # Python (with OTLP export)
-pip install "etrace[otel]"
+pip install "etrace-py[otel]"
 
 # TypeScript
-npm install etrace
+npm install @evaris/etrace
 ```
 
 ## What Makes This Different
@@ -160,7 +161,7 @@ npm install etrace
 - **Cost tracking.** Token counts + pricing catalog = dollars. Auto-calculated.
 - **Framework adapters.** LangChain callback handler out of the box.
 - **CodeGen'd types.** JSON Schema → Python dataclasses + TypeScript
-interfaces. Easily expanded to other languages.
+  interfaces. Easily expanded to other languages.
 
 ## License
 
