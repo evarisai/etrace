@@ -1,0 +1,91 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Package to publish"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - python
+          - typescript
+      confirm:
+        description: "Type publish to confirm"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Confirm Manual Publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require explicit confirmation
+        run: test "${{ inputs.confirm }}" = "publish"
+
+  publish-python:
+    name: Publish Python SDK
+    needs: guard
+    if: inputs.target == 'python' || inputs.target == 'both'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: sdks/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
+      - run: uv sync --all-extras --dev
+      - run: uv run ruff format --check
+      - run: uv run ruff check
+      - run: uv run mypy src
+      - run: uv run pytest -m "not e2e"
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdks/python/dist
+
+  publish-typescript:
+    name: Publish TypeScript SDK
+    needs: guard
+    if: inputs.target == 'typescript' || inputs.target == 'both'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: sdks/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci --ignore-scripts
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm pack --dry-run
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

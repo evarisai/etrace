@@ -2,9 +2,9 @@
 
 Provides :class:`RunTracker`, a framework-agnostic mixin that maps
 ``run_id`` / ``parent_run_id`` pairs to etrace spans with correct
-parent-child nesting.  Framework-specific adapters (LangChain, CrewAI,
-AutoGen, …) compose ``RunTracker`` with the framework's callback base
-class and translate events into the generic ``on_run_*`` API.
+parent-child nesting. Framework-specific adapters compose ``RunTracker`` with
+the framework callback base class and translate events into the generic
+``on_run_*`` API.
 
 Minimal usage::
 

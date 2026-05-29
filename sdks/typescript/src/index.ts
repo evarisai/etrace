@@ -45,7 +45,6 @@ let _initialized = false;
 let _processor: SpanProcessor | null = null;
 let _calcCosts = true;
 
-/** Maximum attribute value length. Shared constant. */
 export const MAX_ATTR_LEN = 100_000;
 
 // ── Context propagation (AsyncLocalStorage) ──────────────────────────────────
@@ -98,6 +97,8 @@ export interface InitConfig {
   release?: string;
 }
 
+let _exitRegistered = false;
+
 export function init(config: InitConfig = {}): void {
   if (_initialized) return;
 
@@ -117,15 +118,11 @@ export function init(config: InitConfig = {}): void {
 
   const autoInstrument = config.autoInstrument ?? { llm: true, langchain: true };
 
-  // Auto-detect LangChain. The callback handler captures LangChain LLM spans
-  // with framework hierarchy, so provider monkey-patching is redundant there.
+  // Prefer callback-based framework tracing when that integration is present.
   if (autoInstrument.langchain !== false && _hasModule("@langchain/core")) {
     if (autoInstrument.llm !== false) {
       if (config.debug) {
-        console.info(
-          "[etrace] LangChain detected; disabling LLM auto-instrumentation " +
-            "(use etrace.langchainHandler() instead)",
-        );
+        console.info("[etrace] Callback integration detected; disabling LLM auto-instrumentation");
       }
       autoInstrument.llm = false;
     }
@@ -141,6 +138,39 @@ export function init(config: InitConfig = {}): void {
   }
 
   _initialized = true;
+
+  // Auto-shutdown on process exit (like Python's atexit)
+  if (!_exitRegistered) {
+    _exitRegistered = true;
+    const onExit = () => {
+      try {
+        uninstrumentAll();
+      } catch {
+        /* best-effort */
+      }
+      try {
+        _processor?.forceFlush();
+      } catch {
+        /* best-effort */
+      }
+      try {
+        _processor?.shutdown();
+      } catch {
+        /* best-effort */
+      }
+      _processor = null;
+      _initialized = false;
+    };
+    process.on("exit", onExit);
+    process.on("SIGINT", () => {
+      onExit();
+      process.exit(0);
+    });
+    process.on("SIGTERM", () => {
+      onExit();
+      process.exit(0);
+    });
+  }
 }
 
 // ── trace() — the ONE primitive ──────────────────────────────────────────────
@@ -148,6 +178,8 @@ export function init(config: InitConfig = {}): void {
 export interface TraceConfig {
   kind?: TraceKind;
   input?: unknown;
+  captureInput?: boolean;
+  captureOutput?: boolean;
   model?: string;
   provider?: string;
   attributes?: Record<string, unknown>;
@@ -193,6 +225,9 @@ export function trace<T>(
       if (_isPromise(result)) {
         return result.then(
           (value) => {
+            if (config?.captureOutput !== false && span.output === undefined) {
+              span.output = value;
+            }
             finalize(span);
             return value;
           },
@@ -203,6 +238,9 @@ export function trace<T>(
         ) as T;
       }
 
+      if (config?.captureOutput !== false && span.output === undefined) {
+        span.output = result;
+      }
       finalize(span);
       return result;
     } catch (err) {
@@ -212,49 +250,133 @@ export function trace<T>(
   });
 }
 
-// ── observe — decorator wrapper ──────────────────────────────────────────────
+// ── observe — decorator/function wrapper ────────────────────────────────────
 
-export function observe(config?: TraceConfig & { name?: string }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function <T extends (...args: any[]) => any>(
-    fn: T,
-    _context?: ClassMethodDecoratorContext,
-  ): T {
-    const traceName = config?.name ?? fn.name ?? config?.kind ?? "custom";
-    const wrapped = function (this: unknown, ...args: unknown[]) {
-      return trace(traceName, () => fn.apply(this, args), {
-        ...config,
-        input: config?.input ?? args,
-      });
-    };
-    Object.defineProperty(wrapped, "name", { value: fn.name });
-    return wrapped as T;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyFn = (...args: any[]) => any;
+type ObserveConfig = TraceConfig & { name?: string };
+type ObserveDecorator = <T extends AnyFn>(fn: T) => T;
+
+export function observe<T extends AnyFn>(fn: T): T;
+export function observe(config?: ObserveConfig): ObserveDecorator;
+export function observe(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  if (typeof arg === "function") return _wrapObserved(arg, {});
+  return <T extends AnyFn>(fn: T) => _wrapObserved(fn, arg ?? {});
+}
+
+type TOrDecorator = ((fn: AnyFn) => AnyFn) | AnyFn;
+
+function _wrapObserved(fn: AnyFn, config: ObserveConfig = {}): AnyFn {
+  const name = config.name ?? fn.name ?? "anonymous";
+  const kind = config.kind ?? "custom";
+  const captureInput = config.captureInput !== false;
+
+  return function (this: unknown, ...args: unknown[]) {
+    const input = captureInput ? _captureArgs(fn, args) : undefined;
+    return trace(name, () => fn.apply(this, args), {
+      ...config,
+      kind,
+      input,
+    });
   };
+}
+
+function _observeKind(kind: TraceKind, arg: ObserveConfig | AnyFn | undefined): TOrDecorator {
+  if (typeof arg === "function") return _wrapObserved(arg, { kind });
+  return <T extends AnyFn>(fn: T) => _wrapObserved(fn, { ...arg, kind });
 }
 
 // ── Convenience decorators ───────────────────────────────────────────────────
 
-export const workflow = (c?: TraceConfig & { name?: string }) =>
-  observe({ ...c, kind: "workflow" });
-export const agent = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "agent" });
-export const step = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "step" });
-export const tool = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "tool" });
-export const llm = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "llm" });
-export const http = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "http" });
-export const retrieval = (c?: TraceConfig & { name?: string }) =>
-  observe({ ...c, kind: "retrieval" });
-export const reranker = (c?: TraceConfig & { name?: string }) =>
-  observe({ ...c, kind: "reranker" });
-export const embedding = (c?: TraceConfig & { name?: string }) =>
-  observe({ ...c, kind: "embedding" });
-export const sandbox = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "sandbox" });
-export const handoff = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "handoff" });
-export const approval = (c?: TraceConfig & { name?: string }) =>
-  observe({ ...c, kind: "approval" });
-export const guardrail = (c?: TraceConfig & { name?: string }) =>
-  observe({ ...c, kind: "guardrail" });
-export const evaluation = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "eval" });
-export const scorer = (c?: TraceConfig & { name?: string }) => observe({ ...c, kind: "scorer" });
+export function workflow<T extends AnyFn>(fn: T): T;
+export function workflow(config?: ObserveConfig): ObserveDecorator;
+export function workflow(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("workflow", arg);
+}
+
+export function agent<T extends AnyFn>(fn: T): T;
+export function agent(config?: ObserveConfig): ObserveDecorator;
+export function agent(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("agent", arg);
+}
+
+export function step<T extends AnyFn>(fn: T): T;
+export function step(config?: ObserveConfig): ObserveDecorator;
+export function step(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("step", arg);
+}
+
+export function tool<T extends AnyFn>(fn: T): T;
+export function tool(config?: ObserveConfig): ObserveDecorator;
+export function tool(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("tool", arg);
+}
+
+export function llm<T extends AnyFn>(fn: T): T;
+export function llm(config?: ObserveConfig): ObserveDecorator;
+export function llm(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("llm", arg);
+}
+
+export function http<T extends AnyFn>(fn: T): T;
+export function http(config?: ObserveConfig): ObserveDecorator;
+export function http(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("http", arg);
+}
+
+export function retrieval<T extends AnyFn>(fn: T): T;
+export function retrieval(config?: ObserveConfig): ObserveDecorator;
+export function retrieval(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("retrieval", arg);
+}
+
+export function reranker<T extends AnyFn>(fn: T): T;
+export function reranker(config?: ObserveConfig): ObserveDecorator;
+export function reranker(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("reranker", arg);
+}
+
+export function embedding<T extends AnyFn>(fn: T): T;
+export function embedding(config?: ObserveConfig): ObserveDecorator;
+export function embedding(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("embedding", arg);
+}
+
+export function sandbox<T extends AnyFn>(fn: T): T;
+export function sandbox(config?: ObserveConfig): ObserveDecorator;
+export function sandbox(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("sandbox", arg);
+}
+
+export function handoff<T extends AnyFn>(fn: T): T;
+export function handoff(config?: ObserveConfig): ObserveDecorator;
+export function handoff(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("handoff", arg);
+}
+
+export function approval<T extends AnyFn>(fn: T): T;
+export function approval(config?: ObserveConfig): ObserveDecorator;
+export function approval(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("approval", arg);
+}
+
+export function guardrail<T extends AnyFn>(fn: T): T;
+export function guardrail(config?: ObserveConfig): ObserveDecorator;
+export function guardrail(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("guardrail", arg);
+}
+
+export function evaluation<T extends AnyFn>(fn: T): T;
+export function evaluation(config?: ObserveConfig): ObserveDecorator;
+export function evaluation(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("eval", arg);
+}
+
+export function scorer<T extends AnyFn>(fn: T): T;
+export function scorer(config?: ObserveConfig): ObserveDecorator;
+export function scorer(arg?: ObserveConfig | AnyFn): TOrDecorator {
+  return _observeKind("scorer", arg);
+}
 
 // ── Span enrichment ──────────────────────────────────────────────────────────
 
@@ -267,10 +389,6 @@ export interface UsageInput {
   model?: string;
 }
 
-/**
- * Calculate cost for a Usage object. Pure function — no span mutation.
- * Returns a NEW Usage with calculated_* and input/output/totalCost populated.
- */
 export function calculateUsageCost(usage: Usage, model?: string | null): Usage {
   if (!model) return { ...usage };
 
@@ -298,12 +416,6 @@ export function calculateUsageCost(usage: Usage, model?: string | null): Usage {
   }
 }
 
-/**
- * Set token usage on the current span.
- *
- * When calculateCosts=true (default in init()), costs are auto-populated
- * by delegating to calculateUsageCost().
- */
 export function setUsage(input: UsageInput = {}): Usage {
   const span = _spanStore.getStore();
   if (!span) return {};
@@ -332,13 +444,6 @@ export function setUsage(input: UsageInput = {}): Usage {
   }
 
   return span.usage;
-}
-
-/** Convenience: calculate cost on a span's existing usage, in place. */
-export function calcSpanCost(span: Span): void {
-  if (span.usage && span.model) {
-    span.usage = calculateUsageCost(span.usage, span.model);
-  }
 }
 
 export function setOutput(value: unknown): void {
@@ -448,7 +553,7 @@ export function _createSpan(
     model: config?.model,
     provider: config?.provider,
     input: config?.input,
-    attributes: { ...(config?.attributes ?? {}) },
+    attributes: { "etrace.kind": kind, ...(config?.attributes ?? {}) },
     events: [],
     tags: config?.tags ?? [],
   };
@@ -501,4 +606,40 @@ function _hasModule(name: string): boolean {
   } catch {
     return false;
   }
+}
+
+function _captureArgs(fn: (...args: unknown[]) => unknown, args: unknown[]): unknown {
+  const names = _parameterNames(fn);
+  if (names.length === 0) return args.length === 1 ? args[0] : args;
+
+  const captured: Record<string, unknown> = {};
+  for (let i = 0; i < args.length; i += 1) {
+    captured[names[i] ?? `arg${i}`] = _truncateLargeValue(args[i]);
+  }
+  return captured;
+}
+
+function _parameterNames(fn: (...args: unknown[]) => unknown): string[] {
+  const source = Function.prototype.toString.call(fn).replace(/\s+/g, " ");
+  const match = source.match(/^[^(]*\(([^)]*)\)/) ?? source.match(/^(?:async )?([^=()]+?)\s*=>/);
+  if (!match?.[1]) return [];
+  return match[1]
+    .split(",")
+    .map((part) => part.trim().replace(/=.*$/, "").trim())
+    .filter((part) => /^[A-Za-z_$][\w$]*$/.test(part) && part !== "this");
+}
+
+function _truncateLargeValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.length > MAX_ATTR_LEN ? value.slice(0, MAX_ATTR_LEN) : value;
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized && serialized.length > MAX_ATTR_LEN) {
+      return serialized.slice(0, MAX_ATTR_LEN);
+    }
+  } catch {
+    return String(value).slice(0, MAX_ATTR_LEN);
+  }
+  return value;
 }

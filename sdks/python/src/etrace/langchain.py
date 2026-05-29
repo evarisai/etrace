@@ -1,8 +1,8 @@
-"""LangChain adapter for etrace tracing.
+"""Callback adapter for framework-driven agent tracing.
 
-Translates LangChain's ``BaseCallbackHandler`` events into the generic
-:class:`~etrace.tracing.RunTracker` API so that LLM calls, tool
-executions, and chain steps become properly nested etrace spans.
+Translates callback events into the generic :class:`~etrace.tracing.RunTracker`
+API so that LLM calls, tool executions, and chain steps become properly nested
+etrace spans.
 
 Usage::
 
@@ -14,8 +14,8 @@ Usage::
         config={"callbacks": [handler]},
     )
 
-The handler is auto-registered when ``langchain`` is installed and
-``etrace.init()`` is called with ``auto_instrument={"langchain": True}``.
+The handler is auto-registered when the supported callback package is installed
+and ``etrace.init()`` is called with callback integration enabled.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ except ImportError:
 
 
 def _serialize_messages(messages: list[Any]) -> list[dict[str, Any]]:
-    """Convert LangChain messages to a serializable list."""
+    """Convert callback message objects to a serializable list."""
     result = []
     for msg in messages:
         entry = {
@@ -59,11 +59,10 @@ def _serialize_messages(messages: list[Any]) -> list[dict[str, Any]]:
 
 
 class EtraceLangChainHandler(BaseCallbackHandler):  # type: ignore[misc]
-    """LangChain callback handler backed by :class:`RunTracker`.
+    """Callback handler backed by :class:`RunTracker`.
 
-    Maps LangChain's ``run_id`` / ``parent_run_id`` to the tracker's
-    generic run IDs so spans nest correctly (tool spans become children
-    of the LLM span that triggered them).
+    Maps callback ``run_id`` / ``parent_run_id`` values to tracker run IDs so
+    spans nest correctly.
     """
 
     def __init__(self) -> None:

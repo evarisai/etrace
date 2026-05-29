@@ -10,8 +10,6 @@ import {
   trace,
   setUsage,
   calculateUsageCost,
-  calcSpanCost,
-  getCurrentSpan,
   InMemoryExporter,
 } from "../src/index.js";
 import type { Usage } from "../src/types.js";
@@ -239,47 +237,5 @@ describe("setUsage() auto-cost", () => {
       },
       { kind: "llm", model: "unknown-xyz" },
     );
-  });
-});
-
-// ── calcSpanCost() convenience ───────────────────────────────────────────────
-
-describe("calcSpanCost()", () => {
-  it("populates usage cost", () => {
-    setup({ calculateCosts: false });
-    trace(
-      "llm",
-      () => {
-        setUsage({ inputTokens: 1000, outputTokens: 500 });
-        const span = getCurrentSpan()!;
-        expect(span.usage!.totalCost).toBeFalsy();
-
-        calcSpanCost(span);
-        expect(span.usage!.totalCost).toBeGreaterThan(0);
-        expect(span.usage!.calculatedInputCost).toBeGreaterThan(0);
-      },
-      { kind: "llm", model: "gpt-4o" },
-    );
-  });
-
-  it("noop when no usage", () => {
-    trace(
-      "test",
-      () => {
-        const span = getCurrentSpan()!;
-        calcSpanCost(span);
-        expect(span.usage).toBeUndefined();
-      },
-      { model: "gpt-4o" },
-    );
-  });
-
-  it("noop when no model", () => {
-    trace("test", () => {
-      setUsage({ inputTokens: 100 });
-      const span = getCurrentSpan()!;
-      calcSpanCost(span);
-      expect(span.usage!.totalCost).toBeFalsy();
-    });
   });
 });

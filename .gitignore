@@ -31,5 +31,9 @@ etrace-studio/node_modules/
 # Generated / scratch
 architecture-diagram.html
 
+# Local secrets
+examples/*/.env
+examples/*/.env.local
+
 # Reference repos (cloned for research, not part of the project)
 /tmp/

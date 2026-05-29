@@ -78,12 +78,12 @@ python scripts/sync_pricing.py
 | `workflow` | Top-level pipeline | Manual (`@workflow`) |
 | `agent` | Agent loop | Manual (`@agent`) |
 | `step` | Discrete step in pipeline | Manual (`@step`) |
-| `llm` | LLM API call | ✅ Traceloop |
+| `llm` | LLM API call | Automatic |
 | `tool` | Tool/function call | Manual (`@tool`) |
 | `http` | Outbound HTTP request | OTel HTTP instrumentors |
 | `retrieval` | Vector DB / search | Manual (`@retrieval`) |
 | `reranker` | Reranking results | Manual (`@reranker`) |
-| `embedding` | Embedding generation | ✅ Traceloop |
+| `embedding` | Embedding generation | Automatic |
 | `sandbox` | Code execution (Docker/E2B) | Manual (`@sandbox`) |
 | `handoff` | Agent-to-agent delegation | Manual (`@handoff`) |
 | `approval` | Human approval/rejection | Manual (`@approval`) |

@@ -7,7 +7,7 @@
   "$defs": {
     "TraceKind": {
       "title": "TraceKind",
-      "description": "What kind of operation this span represents. Covers online tracing, offline evals, and monitoring. Based on analysis of Inspect AI (20 event types), OpenInference/Arize Phoenix, Langfuse, and Evaris monitoring/eval requirements.",
+      "description": "What kind of operation this span represents. Covers online tracing, offline evals, and monitoring for AI agents and LLM applications.",
       "type": "string",
       "enum": [
         "workflow",

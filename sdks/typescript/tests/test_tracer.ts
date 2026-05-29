@@ -267,14 +267,14 @@ describe("@observe", () => {
     expect(exp.getFinishedSpans()[0].name).toBe("myAgent");
   });
 
-  it("captures input args", () => {
+  it("captures input as named args", () => {
     const exp = setup();
     const fn = observe({ kind: "tool" })(function add(a: number, b: number) {
       return a + b;
     });
     fn(1, 2);
     const span = exp.getFinishedSpans()[0];
-    expect(span.input).toEqual([1, 2]);
+    expect(span.input).toEqual({ a: 1, b: 2 });
   });
 
   it("uses custom name", () => {

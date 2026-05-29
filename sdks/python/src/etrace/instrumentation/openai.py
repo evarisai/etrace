@@ -91,9 +91,8 @@ class OpenAIInstrumentor(BaseInstrumentor):
         kwargs: dict[str, Any],
         calc_costs: bool,
     ) -> None:
-        # LangChain (and other frameworks) may use
-        # client.chat.completions.with_raw_response.create(...) which
-        # returns a LegacyAPIResponse wrapping the real ChatCompletion.
+        # Some callers use with_raw_response.create(...), which returns a
+        # LegacyAPIResponse wrapping the real ChatCompletion.
         parsed = result.parse() if type(result).__name__ == "LegacyAPIResponse" else result
 
         model = self._resolve_model(parsed, str(kwargs.get("model", "")))

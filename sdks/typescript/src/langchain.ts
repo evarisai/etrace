@@ -1,9 +1,9 @@
 /**
- * LangChain JS callback adapter for etrace.
+ * Callback adapter for framework-driven agent tracing.
  *
- * The class intentionally avoids importing LangChain at module load time.
- * LangChain callback managers use method names on callback objects, so this
- * duck-typed handler can be passed directly in config.callbacks.
+ * The class intentionally avoids importing the optional framework package at
+ * module load time. Callback managers use method names on callback objects, so
+ * this duck-typed handler can be passed directly in config.callbacks.
  */
 import { MAX_ATTR_LEN } from "./index.js";
 import { RunTracker } from "./tracing.js";

@@ -1,6 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { trace, setOutput } from "../../etrace";
+import { tool } from "../../etrace";
 
 interface GeocodingResponse {
   results?: Array<{
@@ -25,6 +25,12 @@ interface WeatherResponse {
   };
 }
 
+const getWeatherTool = tool({ name: "get-weather" })(async function getWeatherTool(
+  context: { location: string },
+) {
+  return getWeather(context.location);
+});
+
 export const weatherTool = createTool({
   id: "get-weather",
   description: "Get current weather for a location using Open-Meteo.",
@@ -42,20 +48,7 @@ export const weatherTool = createTool({
     location: z.string(),
     observedAt: z.string(),
   }),
-  execute: async (context) =>
-    trace(
-      "get-weather",
-      async () => {
-        const result = await getWeather(context.location);
-        setOutput(result);
-        return result;
-      },
-      {
-        kind: "tool",
-        input: context,
-        attributes: { "etrace.kind": "tool", "tool.name": "get-weather" },
-      },
-    ),
+  execute: (context) => getWeatherTool(context),
 });
 
 async function getWeather(location: string) {
@@ -111,13 +104,9 @@ function getWeatherCondition(code: number): string {
     51: "Light drizzle",
     53: "Moderate drizzle",
     55: "Dense drizzle",
-    56: "Light freezing drizzle",
-    57: "Dense freezing drizzle",
     61: "Slight rain",
     63: "Moderate rain",
     65: "Heavy rain",
-    66: "Light freezing rain",
-    67: "Heavy freezing rain",
     71: "Slight snow fall",
     73: "Moderate snow fall",
     75: "Heavy snow fall",

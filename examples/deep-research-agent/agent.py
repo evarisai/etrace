@@ -267,8 +267,6 @@ def main() -> None:
     answer = deep_research(question)
     print(answer)
 
-    etrace.shutdown()
-
 
 if __name__ == "__main__":
     main()

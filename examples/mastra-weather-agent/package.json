@@ -13,6 +13,7 @@
     "@ai-sdk/openai": "latest",
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
     "@opentelemetry/sdk-trace-base": "^2.7.1",
     "dotenv": "^17.2.3",
     "zod": "^3.25.76"

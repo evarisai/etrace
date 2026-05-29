@@ -103,14 +103,14 @@ describe("noop decorators", () => {
 // ── observe() contracts ──────────────────────────────────────────────────────
 
 describe("observe() contracts", () => {
-  it("captures input args by default", () => {
+  it("captures input as named args by default", () => {
     const exp = setup();
     const fn = observe()(function add(a: number, b: number) {
       return a + b;
     });
     fn(3, 4);
     const span = exp.getFinishedSpans()[0];
-    expect(span.input).toEqual([3, 4]);
+    expect(span.input).toEqual({ a: 3, b: 4 });
   });
 
   it("respects custom name", () => {

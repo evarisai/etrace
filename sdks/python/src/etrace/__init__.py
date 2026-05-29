@@ -147,18 +147,13 @@ def init(
         if auto_instrument is None:
             auto_instrument = {"llm": True, "langchain": True}
 
-        # Auto-detect LangChain: when langchain-core is installed the
-        # callback handler captures LLM spans with proper hierarchy, so
-        # the monkey-patching auto-instrumentor is redundant.
+        # Prefer callback-based framework tracing when that integration is present.
         if auto_instrument.get("langchain", True):
             try:
                 import langchain_core  # type: ignore[import-not-found] # noqa: F401
 
                 if auto_instrument.get("llm", True):
-                    logger.info(
-                        "LangChain detected — disabling LLM auto-instrumentation "
-                        "(use etrace.langchain_handler() instead)"
-                    )
+                    logger.info("Callback integration detected; disabling LLM auto-instrumentation for this process")
                     auto_instrument["llm"] = False
             except ImportError:
                 pass
@@ -617,7 +612,7 @@ def is_initialized() -> bool:
 
 
 def langchain_handler() -> Any:
-    """Create a LangChain callback handler that inherits the active etrace context.
+    """Create a callback handler that inherits the active etrace context.
 
     Returns a fresh :class:`~etrace.langchain.EtraceLangChainHandler` on every
     call so that ``_current_span`` is captured correctly for the enclosing
@@ -648,7 +643,7 @@ def _make_span(
     model: str | None = None,
     provider: str | None = None,
 ) -> Span:
-    return Span(
+    span = Span(
         trace_id=uuid.uuid4().hex,
         span_id=uuid.uuid4().hex[:16],
         name=name,
@@ -658,7 +653,9 @@ def _make_span(
         input=input,
         model=model,
         provider=provider,
+        attributes={"etrace.kind": kind.value},
     )
+    return span
 
 
 def _end_span(span: Span, start_monotonic: float) -> None:

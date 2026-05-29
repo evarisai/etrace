@@ -1,44 +1,49 @@
 {
   "name": "etrace",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "AI agent tracing library — zero-dep core, composable pipeline, auto-instruments LLM calls",
-  "main": "./src/index.js",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./types": {
-      "types": "./src/types.ts",
-      "import": "./src/types.ts"
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
     },
     "./pricing": {
-      "types": "./src/pricing.ts",
-      "import": "./src/pricing.ts"
+      "types": "./dist/pricing.d.ts",
+      "import": "./dist/pricing.js"
     },
     "./exporter": {
-      "types": "./src/exporter.ts",
-      "import": "./src/exporter.ts"
+      "types": "./dist/exporter.d.ts",
+      "import": "./dist/exporter.js"
     },
     "./processor": {
-      "types": "./src/processor.ts",
-      "import": "./src/processor.ts"
+      "types": "./dist/processor.d.ts",
+      "import": "./dist/processor.js"
     },
     "./otel": {
-      "types": "./src/otel/index.ts",
-      "import": "./src/otel/index.ts"
+      "types": "./dist/otel/index.d.ts",
+      "import": "./dist/otel/index.js"
     },
     "./langchain": {
-      "types": "./src/langchain.ts",
-      "import": "./src/langchain.ts"
+      "types": "./dist/langchain.d.ts",
+      "import": "./dist/langchain.js"
     },
     "./evaris": {
-      "types": "./src/evaris/index.ts",
-      "import": "./src/evaris/index.ts"
+      "types": "./dist/evaris/index.d.ts",
+      "import": "./dist/evaris/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
