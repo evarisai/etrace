@@ -6,12 +6,13 @@ on:
       target:
         description: "Package to publish"
         required: true
-        default: "both"
+        default: "all"
         type: choice
         options:
-          - both
+          - all
           - python
           - typescript
+          - studio
       confirm:
         description: "Type publish to confirm"
         required: true
@@ -34,7 +35,7 @@ jobs:
   publish-python:
     name: Publish Python SDK
     needs: guard
-    if: inputs.target == 'python' || inputs.target == 'both'
+    if: inputs.target == 'python' || inputs.target == 'all'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -64,7 +65,7 @@ jobs:
   publish-typescript:
     name: Publish TypeScript SDK
     needs: guard
-    if: inputs.target == 'typescript' || inputs.target == 'both'
+    if: inputs.target == 'typescript' || inputs.target == 'all'
     runs-on: ubuntu-latest
     environment: npm
     permissions:
@@ -85,6 +86,39 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm pack --dry-run
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || '' }}
+
+  publish-studio:
+    name: Publish Studio
+    needs: guard
+    if: inputs.target == 'studio' || inputs.target == 'all'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: etrace-studio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
       - run: npm pack --dry-run
       - run: npm publish --provenance --access public
         env:
